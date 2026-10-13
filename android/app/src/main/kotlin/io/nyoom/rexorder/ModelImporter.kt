@@ -12,7 +12,6 @@ import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
 import java.io.IOException
-import java.security.MessageDigest
 import java.util.UUID
 
 class ModelImporter(
@@ -23,14 +22,10 @@ class ModelImporter(
     fun importModel(
         uri: Uri,
         modelId: String,
-        expectedSha256: String,
         kind: String,
         onProgress: (Long, Long) -> Unit,
     ): String {
         requireValidModelId(modelId)
-        require(expectedSha256.matches(Regex("[0-9a-fA-F]{64}"))) {
-            "Invalid expected SHA-256."
-        }
         require(kind == "tar.bz2" || kind == "file") { "Unsupported archive type." }
 
         val modelRoot = File(filesDirectory, "models")
@@ -45,7 +40,6 @@ class ModelImporter(
         var lastProgressTime = SystemClock.elapsedRealtime()
         try {
             val expectedLength = queryLength(uri)
-            val digest = MessageDigest.getInstance("SHA-256")
             contentResolver.openInputStream(uri)?.use { input ->
                 FileOutputStream(temporaryFile).use { output ->
                     val buffer = ByteArray(COPY_BUFFER_SIZE)
@@ -54,7 +48,6 @@ class ModelImporter(
                         val count = input.read(buffer)
                         if (count < 0) break
                         output.write(buffer, 0, count)
-                        digest.update(buffer, 0, count)
                         bytesRead += count
                         val elapsedTime = SystemClock.elapsedRealtime() - lastProgressTime
                         if (
@@ -70,40 +63,51 @@ class ModelImporter(
                 }
             } ?: throw IOException("Unable to open the selected document.")
 
-            val actualSha256 = digest.digest().joinToString("") {
-                "%02x".format(it.toInt() and 0xff)
-            }
-            if (!actualSha256.equals(expectedSha256, ignoreCase = true)) {
-                throw SecurityException(
-                    "Checksum mismatch: expected $expectedSha256, received $actualSha256.",
-                )
-            }
-
             partialDirectory.deleteRecursively()
             if (!partialDirectory.mkdirs()) {
                 throw IOException("Unable to create temporary model directory.")
             }
-            when (kind) {
-                "tar.bz2" -> extractArchive(temporaryFile, partialDirectory)
-                "file" -> {
-                    if (modelId != "silero-vad") {
-                        throw IllegalArgumentException("Only the VAD model accepts a plain file.")
-                    }
-                    FileInputStream(temporaryFile).use { input ->
-                        FileOutputStream(File(partialDirectory, "silero_vad.onnx")).use { output ->
-                            input.copyTo(output, COPY_BUFFER_SIZE)
+            try {
+                when (kind) {
+                    "tar.bz2" -> extractArchive(temporaryFile, partialDirectory)
+                    "file" -> {
+                        if (modelId != "silero-vad") {
+                            throw IllegalArgumentException(
+                                "Only the VAD model accepts a plain file.",
+                            )
+                        }
+                        if (temporaryFile.length() == 0L) {
+                            throw IOException("The selected VAD model file is empty.")
+                        }
+                        FileInputStream(temporaryFile).use { input ->
+                            FileOutputStream(
+                                File(partialDirectory, "silero_vad.onnx"),
+                            ).use { output ->
+                                input.copyTo(output, COPY_BUFFER_SIZE)
+                            }
                         }
                     }
                 }
-            }
-            if (partialDirectory.walkTopDown().none { it.isFile }) {
-                throw IOException("The archive did not contain supported model files.")
-            }
-            val missingFiles = requiredFiles(modelId).filterNot {
-                File(partialDirectory, it).isFile
-            }
-            if (missingFiles.isNotEmpty()) {
-                throw IOException("The archive is missing required files: ${missingFiles.joinToString()}.")
+                if (partialDirectory.walkTopDown().none { it.isFile }) {
+                    throw IOException("The archive did not contain supported model files.")
+                }
+                val missingFiles = requiredFiles(modelId).filterNot {
+                    File(partialDirectory, it).isFile
+                }
+                if (missingFiles.isNotEmpty()) {
+                    throw IOException(
+                        "The archive is missing required files: ${missingFiles.joinToString()}.",
+                    )
+                }
+            } catch (error: Exception) {
+                if (kind == "tar.bz2") {
+                    throw IOException(
+                        "The selected file is not a valid ${modelDisplayName(modelId)} " +
+                            "archive: ${error.message ?: "Unable to decode the archive."}",
+                        error,
+                    )
+                }
+                throw error
             }
             if (backup.exists()) backup.deleteRecursively()
             val hadDestination = destination.exists()
@@ -199,6 +203,13 @@ class ModelImporter(
 
     private fun requireValidModelId(modelId: String) {
         require(modelId.matches(Regex("[a-z0-9-]+"))) { "Invalid model id." }
+    }
+
+    private fun modelDisplayName(modelId: String): String = when (modelId) {
+        "whisper-small" -> "Whisper Small"
+        "whisper-turbo" -> "Whisper Turbo"
+        "sense-voice" -> "SenseVoice"
+        else -> modelId
     }
 
     private fun requiredFiles(modelId: String): List<String> = when (modelId) {

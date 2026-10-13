@@ -48,7 +48,6 @@ class MethodChannelModelImportClient implements ModelImportClient {
     return (await _methods.invokeMethod<String>('importModel', {
       'uri': uri,
       'modelId': model.id,
-      'sha256': model.sha256,
       'kind': model.importKind,
     }))!;
   }

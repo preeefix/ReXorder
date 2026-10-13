@@ -126,7 +126,7 @@ class ModelManagerController extends Notifier<ModelManagerState> {
       await refresh();
       state = state.copyWith(
         phase: ModelImportPhase.success,
-        message: '${model.displayName} imported and verified.',
+        message: '${model.displayName} imported.',
       );
     } catch (error) {
       state = state.copyWith(

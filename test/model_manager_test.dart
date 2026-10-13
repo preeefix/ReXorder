@@ -8,7 +8,7 @@ import 'package:rexorder/models/model_manager.dart';
 
 void main() {
   test(
-    'model import state handles progress, success, and checksum failure',
+    'model import state handles progress, success, and archive failure',
     () async {
       final client = _FakeModelImportClient();
       final container = ProviderContainer(
@@ -57,7 +57,7 @@ void main() {
       );
       expect(
         container.read(modelManagerProvider).message,
-        contains('Checksum mismatch'),
+        contains('not a valid Whisper Small archive'),
       );
     },
   );
@@ -78,7 +78,12 @@ class _FakeModelImportClient implements ModelImportClient {
 
   @override
   Future<String> importModel(String uri, CatalogModel model) async {
-    if (shouldFail) throw StateError('Checksum mismatch');
+    if (shouldFail) {
+      throw StateError(
+        'The selected file is not a valid ${model.displayName} archive: '
+        'The archive is missing required files.',
+      );
+    }
     final result = await importCompleter.future;
     installed[model.id] = model.files;
     return result;

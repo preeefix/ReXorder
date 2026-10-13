@@ -53,9 +53,8 @@ class MainActivity : FlutterActivity() {
                 "importModel" -> {
                     val uri = call.argument<String>("uri")?.let { Uri.parse(it) }
                     val modelId = call.argument<String>("modelId")
-                    val sha256 = call.argument<String>("sha256")
                     val kind = call.argument<String>("kind")
-                    if (uri == null || modelId == null || sha256 == null || kind == null) {
+                    if (uri == null || modelId == null || kind == null) {
                         result.error("invalid_arguments", "Missing model import arguments.", null)
                     } else {
                         modelExecutor.execute {
@@ -63,7 +62,6 @@ class MainActivity : FlutterActivity() {
                                 val directory = modelImporter.importModel(
                                     uri,
                                     modelId,
-                                    sha256,
                                     kind,
                                 ) { bytesRead, totalBytes ->
                                     mainHandler.post {

@@ -33,7 +33,7 @@ Language note: a recording that switches EN↔JA between sentences or turns tran
 
 ## Models: local imports, no bundled assets
 - APKs contain no ONNX model files. Users download pinned models from the official sherpa-onnx release page and import them through Android's system document picker.
-- A Kotlin importer streams, hashes, and selectively extracts the files into app-private storage. Imported Whisper, SenseVoice, and Silero VAD models are used only on-device.
+- A Kotlin importer streams and selectively extracts the files into app-private storage. Imported Whisper, SenseVoice, and Silero VAD models are used only on-device.
 - CI checks APK permissions and asserts that no `.onnx` model files are packaged.
 
 ## Phases
