@@ -23,6 +23,8 @@ jobs:
       - run: flutter build apk --release --target-platform android-arm64,android-x64 --split-per-abi
       - run: tool/check_no_internet.sh build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
       - run: tool/check_no_internet.sh build/app/outputs/flutter-apk/app-x86_64-release.apk
+      - run: tool/check_no_models.sh build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+      - run: tool/check_no_models.sh build/app/outputs/flutter-apk/app-x86_64-release.apk
       - uses: actions/upload-artifact@v4
         with:
           name: rexorder-release-apks

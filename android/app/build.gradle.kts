@@ -34,6 +34,10 @@ android {
     }
 }
 
+dependencies {
+    implementation("org.apache.commons:commons-compress:1.28.0")
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
