@@ -12,9 +12,11 @@ import 'data/providers.dart';
 import 'data/recovery.dart';
 import 'domain/recording_repository.dart';
 import 'processing/transcription_queue.dart';
+import 'theme/theme_mode_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  final initialThemeMode = await loadThemeMode();
   final supportDirectory = await getApplicationSupportDirectory();
   final recordingsDirectory = Directory(
     p.join(supportDirectory.path, 'recordings'),
@@ -42,6 +44,9 @@ Future<void> main() async {
         recordingsDirectoryProvider.overrideWithValue(recordingsDirectory),
         modelsDirectoryProvider.overrideWithValue(modelsDirectory),
         transcriptionQueueProvider.overrideWithValue(transcriptionQueue),
+        themeModeProvider.overrideWith(
+          () => ThemeModeController(initialThemeMode),
+        ),
       ],
       child: const ReXorderApp(),
     ),

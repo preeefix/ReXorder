@@ -12,6 +12,7 @@ import 'screens/library_screen.dart';
 import 'screens/models_screen.dart';
 import 'screens/recorder_screen.dart';
 import 'screens/settings_screen.dart';
+import 'theme/theme_mode_provider.dart';
 
 final recordingRepositoryProvider = Provider<RecordingRepository>(
   (ref) => RecordingRepository(
@@ -70,6 +71,14 @@ class ReXorderApp extends ConsumerWidget {
         useMaterial3: true,
         scaffoldBackgroundColor: const Color(0xFFF7F7F2),
       ),
+      darkTheme: ThemeData(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: const Color(0xFF345C50),
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: true,
+      ),
+      themeMode: ref.watch(themeModeProvider),
       localizationsDelegates: const [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
