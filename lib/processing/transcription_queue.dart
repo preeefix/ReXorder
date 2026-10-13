@@ -12,6 +12,7 @@ import '../domain/recording_repository.dart';
 import '../domain/transcript_segment.dart';
 import '../models/model_catalog.dart';
 import '../models/model_import_client.dart';
+import 'power_channel.dart';
 import 'processing_service_channel.dart';
 import 'transcription_worker.dart';
 
@@ -25,10 +26,22 @@ class TranscriptionQueue {
     Future<void> Function(String)? startService,
     Future<void> Function(String, int, int, String)? updateService,
     Future<void> Function()? stopService,
+    Future<bool> Function()? isCharging,
+    Stream<bool>? chargingChanges,
+    Future<bool> Function()? chargingOnly,
   }) : _modelClient = modelClient ?? const MethodChannelModelImportClient(),
        _startService = startService ?? ProcessingServiceChannel.start,
        _updateService = updateService ?? ProcessingServiceChannel.update,
-       _stopService = stopService ?? ProcessingServiceChannel.stop;
+       _stopService = stopService ?? ProcessingServiceChannel.stop,
+       _isCharging = isCharging ?? PowerChannel.isCharging,
+       _chargingChanges = chargingChanges ?? PowerChannel.chargingChanges,
+       _chargingOnly = chargingOnly ?? TranscriptionPreferences.chargingOnly {
+    _chargingSubscription = _chargingChanges.listen((charging) {
+      if (!charging) return;
+      waitingForCharger.value = false;
+      unawaited(processQueue());
+    });
+  }
 
   final RecordingRepository repository;
   final Directory recordingsDirectory;
@@ -39,11 +52,21 @@ class TranscriptionQueue {
   final Future<void> Function(String) _startService;
   final Future<void> Function(String, int, int, String) _updateService;
   final Future<void> Function() _stopService;
+  final Future<bool> Function() _isCharging;
+  final Stream<bool> _chargingChanges;
+  final Future<bool> Function() _chargingOnly;
+  late final StreamSubscription<bool> _chargingSubscription;
   final ValueNotifier<String?> stage = ValueNotifier(null);
+  final ValueNotifier<bool> waitingForCharger = ValueNotifier(false);
   Future<void>? _processFuture;
 
   Future<void> recoverRunningJobs() =>
       repository.requeueRunningTranscriptions();
+
+  Future<void> chargingPreferenceChanged() async {
+    if (!await _chargingOnly()) waitingForCharger.value = false;
+    await processQueue();
+  }
 
   Future<void> enqueue(
     String recordingId, {
@@ -75,7 +98,14 @@ class TranscriptionQueue {
   Future<void> _runQueue() async {
     while (true) {
       final queued = await repository.listQueuedTranscriptions();
-      if (queued.isEmpty) return;
+      if (queued.isEmpty) {
+        waitingForCharger.value = false;
+        return;
+      }
+      if (await _shouldWaitForCharger()) {
+        await _stopServiceBestEffort();
+        return;
+      }
       final installed = await _modelClient.listInstalled();
       final vad = modelById('silero-vad')!;
       final vadFiles = installed[vad.id] ?? const <String>[];
@@ -113,6 +143,7 @@ class TranscriptionQueue {
         model,
         diarizationInstalled: diarizationInstalled,
       );
+      if (waitingForCharger.value) return;
     }
   }
 
@@ -121,6 +152,10 @@ class TranscriptionQueue {
     CatalogModel model, {
     required bool diarizationInstalled,
   }) async {
+    if (await _shouldWaitForCharger()) {
+      await _stopServiceBestEffort();
+      return;
+    }
     final wavFile = File(p.join(recordingsDirectory.path, recording.fileName));
     final vadFile = File(
       p.join(modelsDirectory.path, 'silero-vad', 'silero_vad.onnx'),
@@ -213,6 +248,17 @@ class TranscriptionQueue {
       );
       for (final segment in segments) {
         if (segment.text != null) continue;
+        if (await _shouldWaitForCharger()) {
+          await processor.closeModel();
+          await repository.updateTranscription(
+            id: recording.id,
+            status: TranscriptionStatus.queued,
+            modelId: model.id,
+            languageHint: recording.languageHint,
+            speakerCountHint: recording.speakerCountHint,
+          );
+          return;
+        }
         final result = await processor.transcribe(
           wavFile: wavFile,
           startSample: segment.startMs * 16000 ~/ 1000,
@@ -266,6 +312,16 @@ class TranscriptionQueue {
         speaker: piece.speaker,
       );
 
+  Future<bool> _shouldWaitForCharger() async {
+    if (!await _chargingOnly()) {
+      waitingForCharger.value = false;
+      return false;
+    }
+    final waiting = !await _isCharging();
+    waitingForCharger.value = waiting;
+    return waiting;
+  }
+
   Future<void> _startServiceBestEffort(String title) async {
     try {
       await _startService(title);
@@ -290,9 +346,12 @@ class TranscriptionQueue {
   }
 
   Future<void> dispose() async {
+    await _chargingSubscription.cancel();
     await _worker?.close();
     _worker = null;
     _processor = null;
+    stage.dispose();
+    waitingForCharger.dispose();
   }
 }
 
@@ -303,12 +362,17 @@ final transcriptionQueueProvider = Provider<TranscriptionQueue>(
 class TranscriptionPreferences {
   static const _autoKey = 'autoTranscribe';
   static const _languageKey = 'defaultLanguage';
+  static const _chargingOnlyKey = 'chargingOnly';
 
   static Future<bool> autoTranscribe() async =>
       (await SharedPreferences.getInstance()).getBool(_autoKey) ?? true;
 
   static Future<String> defaultLanguage() async =>
       (await SharedPreferences.getInstance()).getString(_languageKey) ?? 'auto';
+
+  static Future<bool> chargingOnly() async =>
+      (await SharedPreferences.getInstance()).getBool(_chargingOnlyKey) ??
+      false;
 
   static Future<void> setAutoTranscribe(bool value) async {
     await (await SharedPreferences.getInstance()).setBool(_autoKey, value);
@@ -317,6 +381,13 @@ class TranscriptionPreferences {
   static Future<void> setDefaultLanguage(String value) async {
     await (await SharedPreferences.getInstance()).setString(
       _languageKey,
+      value,
+    );
+  }
+
+  static Future<void> setChargingOnly(bool value) async {
+    await (await SharedPreferences.getInstance()).setBool(
+      _chargingOnlyKey,
       value,
     );
   }

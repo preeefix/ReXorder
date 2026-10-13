@@ -40,7 +40,7 @@ Language note: a recording that switches EN↔JA between sentences or turns tran
 1. **Scaffold + recorder core**: Flutter app, CI (analyze, test, release APK, no-INTERNET check), foreground recording service, crash-safe PCM→WAV capture, drift library, playback, rename/delete/share.
 2. **Benchmark + offline transcription**: import models locally, benchmark them on the emulator and on Q.'s phone, then build the VAD → ASR pipeline (background isolate, resumable job), a transcript view synced to playback, and manual language override.
 3. **Speaker detection**: diarization, merge, speaker colors and renaming, speaker-count hint, re-run.
-4. **Polish**: exports (TXT/SRT/VTT/JSON), full-text search, bookmarks, and a "transcribe only while charging" option.
+4. **Transcript tools and charging-aware transcription**: export transcripts as TXT/SRT/VTT/JSON or copy text; search titles and transcript text with timestamp-linked results; add, rename, and delete recording bookmarks; and optionally pause resumable transcription until the phone is charging.
 
 ## Play Store: technical requirements (not planned yet)
 Items to re-check against current Play policy when the time comes:

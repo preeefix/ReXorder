@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:rexorder/asr/asr_engine.dart';
 import 'package:rexorder/asr/diarizer.dart';
 import 'package:rexorder/asr/vad_segmenter.dart';
@@ -14,6 +16,14 @@ import 'package:rexorder/processing/transcription_queue.dart';
 import 'package:rexorder/processing/transcription_worker.dart';
 
 void main() {
+  test('charging-only preference defaults off and persists', () async {
+    SharedPreferences.setMockInitialValues({});
+
+    expect(await TranscriptionPreferences.chargingOnly(), isFalse);
+    await TranscriptionPreferences.setChargingOnly(true);
+    expect(await TranscriptionPreferences.chargingOnly(), isTrue);
+  });
+
   test('preferred installed ASR follows the recommendation order', () {
     expect(defaultAsrPreference, [
       'sense-voice',
@@ -361,6 +371,206 @@ void main() {
       TranscriptionStatus.failed,
     );
   });
+
+  test('charging-only queue waits before processing while unplugged', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.recording('charging-wait');
+    await fixture.repository.updateTranscription(
+      id: recording.id,
+      status: TranscriptionStatus.queued,
+      modelId: 'whisper-small',
+    );
+    final processor = _FakeProcessor();
+    final queue = fixture.queue(
+      processor,
+      isCharging: () async => false,
+      chargingOnly: () async => true,
+    );
+
+    await queue.processQueue();
+
+    expect(processor.transcribeCalls, 0);
+    expect(queue.waitingForCharger.value, isTrue);
+    expect(
+      (await fixture.repository.getRecording(
+        recording.id,
+      ))!.transcriptionStatus,
+      TranscriptionStatus.queued,
+    );
+  });
+
+  test('charging event resumes a waiting transcription', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.recording('charging-resume');
+    await fixture.repository.updateTranscription(
+      id: recording.id,
+      status: TranscriptionStatus.queued,
+      modelId: 'whisper-small',
+    );
+    var charging = false;
+    final changes = StreamController<bool>.broadcast();
+    addTearDown(changes.close);
+    final processor = _FakeProcessor();
+    final queue = fixture.queue(
+      processor,
+      isCharging: () async => charging,
+      chargingChanges: changes.stream,
+      chargingOnly: () async => true,
+    );
+    await queue.processQueue();
+    expect(queue.waitingForCharger.value, isTrue);
+
+    final transcribed = Completer<void>();
+    processor.onTranscribe = (_) => transcribed.complete();
+    charging = true;
+    changes.add(true);
+    await transcribed.future.timeout(const Duration(seconds: 2));
+    await queue.processQueue();
+
+    expect(queue.waitingForCharger.value, isFalse);
+    expect(processor.transcribeCalls, 1);
+    expect(
+      (await fixture.repository.getRecording(
+        recording.id,
+      ))!.transcriptionStatus,
+      TranscriptionStatus.done,
+    );
+  });
+
+  test(
+    'unplug pauses after one segment and replug resumes without loss',
+    () async {
+      final fixture = await _Fixture.create();
+      addTearDown(fixture.dispose);
+      final recording = await fixture.recording('charging-mid-job');
+      await fixture.repository.updateTranscription(
+        id: recording.id,
+        status: TranscriptionStatus.queued,
+        modelId: 'whisper-small',
+      );
+      var charging = true;
+      final changes = StreamController<bool>.broadcast();
+      addTearDown(changes.close);
+      final processor = _FakeProcessor()
+        ..ranges = const [
+          SpeechSampleRange(0, 160),
+          SpeechSampleRange(160, 320),
+          SpeechSampleRange(320, 480),
+        ]
+        ..onTranscribe = (calls) {
+          if (calls == 1) {
+            charging = false;
+            changes.add(false);
+          }
+        };
+      final queue = fixture.queue(
+        processor,
+        isCharging: () async => charging,
+        chargingChanges: changes.stream,
+        chargingOnly: () async => true,
+      );
+
+      await queue.processQueue();
+
+      final pausedSegments = await fixture.repository.listTranscriptSegments(
+        recording.id,
+      );
+      expect(pausedSegments, hasLength(3));
+      expect(pausedSegments.map((segment) => segment.text), [
+        'recognized',
+        null,
+        null,
+      ]);
+      expect(processor.transcribeCalls, 1);
+      expect(queue.waitingForCharger.value, isTrue);
+      expect(
+        (await fixture.repository.getRecording(
+          recording.id,
+        ))!.transcriptionStatus,
+        TranscriptionStatus.queued,
+      );
+
+      charging = true;
+      changes.add(true);
+      await queue.processQueue();
+
+      final completedSegments = await fixture.repository.listTranscriptSegments(
+        recording.id,
+      );
+      expect(completedSegments, hasLength(3));
+      expect(completedSegments.map((segment) => segment.text), [
+        'recognized',
+        'recognized',
+        'recognized',
+      ]);
+      expect(processor.segmentCalls, 1);
+      expect(processor.transcribeCalls, 3);
+      expect(queue.waitingForCharger.value, isFalse);
+    },
+  );
+
+  test('preference off ignores charger state', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.recording('charging-disabled');
+    await fixture.repository.updateTranscription(
+      id: recording.id,
+      status: TranscriptionStatus.queued,
+      modelId: 'whisper-small',
+    );
+    final processor = _FakeProcessor();
+    final queue = fixture.queue(
+      processor,
+      isCharging: () async => false,
+      chargingOnly: () async => false,
+    );
+
+    await queue.processQueue();
+
+    expect(processor.transcribeCalls, 1);
+    expect(queue.waitingForCharger.value, isFalse);
+    expect(
+      (await fixture.repository.getRecording(
+        recording.id,
+      ))!.transcriptionStatus,
+      TranscriptionStatus.done,
+    );
+  });
+
+  test('turning charging-only off resumes a waiting job', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.recording('charging-setting-disabled');
+    await fixture.repository.updateTranscription(
+      id: recording.id,
+      status: TranscriptionStatus.queued,
+      modelId: 'whisper-small',
+    );
+    var chargingOnly = true;
+    final processor = _FakeProcessor();
+    final queue = fixture.queue(
+      processor,
+      isCharging: () async => false,
+      chargingOnly: () async => chargingOnly,
+    );
+
+    await queue.processQueue();
+    expect(queue.waitingForCharger.value, isTrue);
+
+    chargingOnly = false;
+    await queue.chargingPreferenceChanged();
+
+    expect(queue.waitingForCharger.value, isFalse);
+    expect(processor.transcribeCalls, 1);
+    expect(
+      (await fixture.repository.getRecording(
+        recording.id,
+      ))!.transcriptionStatus,
+      TranscriptionStatus.done,
+    );
+  });
 }
 
 class _Fixture {
@@ -375,6 +585,7 @@ class _Fixture {
   final AppDatabase database;
   final RecordingRepository repository;
   final Directory modelsDirectory;
+  final _queues = <TranscriptionQueue>[];
 
   static Future<_Fixture> create() async {
     final directory = await Directory.systemTemp.createTemp('rexorder-queue-');
@@ -421,25 +632,38 @@ class _Fixture {
     Future<void> Function(String, int, int, String)? updateService,
     Future<void> Function()? stopService,
     Map<String, List<String>>? installedModels,
-  }) => TranscriptionQueue(
-    repository: repository,
-    recordingsDirectory: Directory('${directory.path}/recordings'),
-    modelsDirectory: modelsDirectory,
-    modelClient: _FakeModelClient(
-      installed:
-          installedModels ??
-          {
-            'silero-vad': ['silero_vad.onnx'],
-            'whisper-small': modelById('whisper-small')!.files,
-          },
-    ),
-    processor: processor,
-    startService: startService ?? (_) async {},
-    updateService: updateService ?? (_, _, _, _) async {},
-    stopService: stopService ?? () async {},
-  );
+    Future<bool> Function()? isCharging,
+    Stream<bool>? chargingChanges,
+    Future<bool> Function()? chargingOnly,
+  }) {
+    final queue = TranscriptionQueue(
+      repository: repository,
+      recordingsDirectory: Directory('${directory.path}/recordings'),
+      modelsDirectory: modelsDirectory,
+      modelClient: _FakeModelClient(
+        installed:
+            installedModels ??
+            {
+              'silero-vad': ['silero_vad.onnx'],
+              'whisper-small': modelById('whisper-small')!.files,
+            },
+      ),
+      processor: processor,
+      startService: startService ?? (_) async {},
+      updateService: updateService ?? (_, _, _, _) async {},
+      stopService: stopService ?? () async {},
+      isCharging: isCharging ?? () async => false,
+      chargingChanges: chargingChanges ?? const Stream.empty(),
+      chargingOnly: chargingOnly ?? () async => false,
+    );
+    _queues.add(queue);
+    return queue;
+  }
 
   Future<void> dispose() async {
+    for (final queue in _queues) {
+      await queue.dispose();
+    }
     await database.close();
     await directory.delete(recursive: true);
   }
@@ -472,6 +696,8 @@ class _FakeProcessor implements TranscriptionProcessor {
   final openedModelIds = <String>[];
   List<SpeechSampleRange> ranges = [const SpeechSampleRange(0, 160)];
   int segmentCalls = 0;
+  int transcribeCalls = 0;
+  void Function(int call)? onTranscribe;
   bool failSegmentation = false;
   bool failDiarization = false;
   int diarizeCalls = 0;
@@ -520,6 +746,8 @@ class _FakeProcessor implements TranscriptionProcessor {
     required int startSample,
     required int endSample,
   }) async {
+    transcribeCalls++;
+    onTranscribe?.call(transcribeCalls);
     transcribedPaths.add(wavFile.path.split('/').last);
     if (failedPaths.contains(wavFile.path.split('/').last)) {
       throw StateError('synthetic failure');

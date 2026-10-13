@@ -17,6 +17,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _autoTranscribe = true;
+  bool _chargingOnly = false;
   LanguageHint _language = LanguageHint.auto;
   bool _loaded = false;
 
@@ -28,10 +29,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   Future<void> _load() async {
     final auto = await TranscriptionPreferences.autoTranscribe();
+    final chargingOnly = await TranscriptionPreferences.chargingOnly();
     final language = await TranscriptionPreferences.defaultLanguage();
     if (!mounted) return;
     setState(() {
       _autoTranscribe = auto;
+      _chargingOnly = chargingOnly;
       _language = LanguageHint.values.firstWhere(
         (value) => value.name == language,
         orElse: () => LanguageHint.auto,
@@ -68,6 +71,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 : (value) async {
                     setState(() => _autoTranscribe = value);
                     await TranscriptionPreferences.setAutoTranscribe(value);
+                  },
+          ),
+          SwitchListTile(
+            title: const Text('Only transcribe while charging'),
+            value: _chargingOnly,
+            onChanged: !_loaded
+                ? null
+                : (value) async {
+                    setState(() => _chargingOnly = value);
+                    await TranscriptionPreferences.setChargingOnly(value);
+                    await ref
+                        .read(transcriptionQueueProvider)
+                        .chargingPreferenceChanged();
                   },
           ),
           ListTile(

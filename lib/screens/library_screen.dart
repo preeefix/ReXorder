@@ -7,6 +7,7 @@ import '../app.dart';
 import '../domain/recording.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../models/transcription_models_banner.dart';
+import '../processing/transcription_queue.dart';
 
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
@@ -15,10 +16,16 @@ class LibraryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = AppLocalizations.of(context)!;
     final recordings = ref.watch(recordingsProvider);
+    final transcriptionQueue = ref.read(transcriptionQueueProvider);
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.libraryTitle),
         actions: [
+          IconButton(
+            tooltip: 'Search transcripts',
+            onPressed: () => context.push('/search'),
+            icon: const Icon(Icons.search),
+          ),
           IconButton(
             tooltip: 'Settings',
             onPressed: () => context.push('/settings'),
@@ -29,6 +36,30 @@ class LibraryScreen extends ConsumerWidget {
       body: Column(
         children: [
           const TranscriptionModelsBanner(),
+          ValueListenableBuilder<bool>(
+            valueListenable: transcriptionQueue.waitingForCharger,
+            builder: (context, waiting, _) {
+              final queued =
+                  recordings.value?.any(
+                    (recording) =>
+                        recording.transcriptionStatus ==
+                        TranscriptionStatus.queued,
+                  ) ??
+                  false;
+              if (!waiting || !queued) return const SizedBox.shrink();
+              return Card(
+                margin: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                color: Theme.of(context).colorScheme.tertiaryContainer,
+                child: ListTile(
+                  leading: const Icon(Icons.battery_charging_full),
+                  title: const Text(
+                    'Transcription waits until the phone is charging.',
+                  ),
+                  onTap: () => context.push('/settings'),
+                ),
+              );
+            },
+          ),
           Expanded(
             child: recordings.when(
               loading: () => const Center(child: CircularProgressIndicator()),

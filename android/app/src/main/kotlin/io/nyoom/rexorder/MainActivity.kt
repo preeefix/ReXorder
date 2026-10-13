@@ -1,8 +1,12 @@
 package io.nyoom.rexorder
 
 import android.app.Activity
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
@@ -16,8 +20,16 @@ class MainActivity : FlutterActivity() {
     private val modelExecutor = Executors.newSingleThreadExecutor()
     private val mainHandler = Handler(Looper.getMainLooper())
     private var modelProgressSink: EventChannel.EventSink? = null
+    private var chargingEventSink: EventChannel.EventSink? = null
+    private var chargingReceiverRegistered = false
+    private var lastChargingState: Boolean? = null
     private var pendingPickerResult: MethodChannel.Result? = null
     private lateinit var modelImporter: ModelImporter
+    private val chargingReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            publishCharging(currentChargingState())
+        }
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -43,6 +55,50 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "rexorder/power",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isCharging" -> result.success(currentChargingState())
+                else -> result.notImplemented()
+            }
+        }
+        EventChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "rexorder/power/charging",
+        ).setStreamHandler(object : EventChannel.StreamHandler {
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                chargingEventSink = events
+                lastChargingState = null
+                val filter = IntentFilter().apply {
+                    addAction(Intent.ACTION_POWER_CONNECTED)
+                    addAction(Intent.ACTION_POWER_DISCONNECTED)
+                    addAction(Intent.ACTION_BATTERY_CHANGED)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    registerReceiver(
+                        chargingReceiver,
+                        filter,
+                        Context.RECEIVER_NOT_EXPORTED,
+                    )
+                } else {
+                    registerReceiver(chargingReceiver, filter)
+                }
+                chargingReceiverRegistered = true
+                publishCharging(currentChargingState())
+            }
+
+            override fun onCancel(arguments: Any?) {
+                chargingEventSink = null
+                lastChargingState = null
+                if (chargingReceiverRegistered) {
+                    unregisterReceiver(chargingReceiver)
+                    chargingReceiverRegistered = false
+                }
+            }
+        })
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -196,6 +252,24 @@ class MainActivity : FlutterActivity() {
         startActivityForResult(intent, MODEL_PICKER_REQUEST)
     }
 
+    private fun currentChargingState(): Boolean {
+        val batteryIntent = registerReceiver(
+            null,
+            IntentFilter(Intent.ACTION_BATTERY_CHANGED),
+        ) ?: return false
+        val status = batteryIntent.getIntExtra(BatteryManager.EXTRA_STATUS, -1)
+        val plugged = batteryIntent.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0)
+        return status == BatteryManager.BATTERY_STATUS_CHARGING ||
+            status == BatteryManager.BATTERY_STATUS_FULL ||
+            plugged != 0
+    }
+
+    private fun publishCharging(charging: Boolean) {
+        if (lastChargingState == charging) return
+        lastChargingState = charging
+        chargingEventSink?.success(charging)
+    }
+
     @Deprecated("Deprecated by Android, retained for FlutterActivity compatibility.")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         if (requestCode == MODEL_PICKER_REQUEST) {
@@ -208,6 +282,10 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        if (chargingReceiverRegistered) {
+            unregisterReceiver(chargingReceiver)
+            chargingReceiverRegistered = false
+        }
         modelExecutor.shutdown()
         super.onDestroy()
     }
