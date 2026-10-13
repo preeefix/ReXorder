@@ -1,11 +1,14 @@
 import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rexorder/data/database.dart';
 import 'package:rexorder/domain/recording.dart';
 import 'package:rexorder/domain/recording_repository.dart';
 import 'package:rexorder/domain/transcript_segment.dart';
 import 'package:rexorder/export/transcript_export.dart';
+import 'package:rexorder/voiceprint/voiceprint_types.dart';
 
 void main() {
   test(
@@ -334,6 +337,14 @@ void main() {
             name: 'Temporary',
           ),
         );
+    await repository.saveRunSpeakerEmbeddings(failedRun.id, [
+      SpeakerRunEmbedding(
+        runId: failedRun.id,
+        speaker: 0,
+        embedding: Float32List.fromList([1, 0]),
+        speechMs: 4000,
+      ),
+    ]);
 
     await repository.deleteRun(failedRun.id);
 
@@ -345,5 +356,166 @@ void main() {
       )..where((row) => row.runId.equals(failedRun.id))).get(),
       isEmpty,
     );
+    expect(await repository.listRunSpeakerEmbeddings(failedRun.id), isEmpty);
   });
+
+  test(
+    'voiceprint enrollment, confirmation, and person deletion semantics',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'rexorder-person-voiceprints-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final database = AppDatabase.memory();
+      addTearDown(database.close);
+      final repository = RecordingRepository(database, directory);
+      final recording = await repository.createRecording(
+        id: 'voiceprint-person',
+      );
+      final run = await repository.createTranscriptionRun(
+        recordingId: recording.id,
+        status: TranscriptionStatus.done,
+        activate: true,
+      );
+      await repository.replaceTranscriptSegments(recording.id, const [
+        TranscriptSegmentDraft(
+          index: 0,
+          startMs: 0,
+          endMs: 4000,
+          text: 'speaker text',
+          speaker: 0,
+        ),
+      ], runId: run.id);
+      await repository.saveRunSpeakerEmbeddings(run.id, [
+        SpeakerRunEmbedding(
+          runId: run.id,
+          speaker: 0,
+          embedding: Float32List.fromList([1, 0]),
+          speechMs: 4000,
+        ),
+      ]);
+
+      final personId = await repository.createPerson('Alice');
+      await repository.confirmSpeaker(
+        recordingId: recording.id,
+        runId: run.id,
+        speaker: 0,
+        personId: personId,
+      );
+      expect(
+        await repository.speakerNameDetails(recording.id, 0),
+        isA<SpeakerNameDetails>()
+            .having((details) => details.name, 'name', 'Alice')
+            .having((details) => details.source, 'source', 'confirmed')
+            .having((details) => details.personId, 'personId', personId),
+      );
+      expect((await repository.listPeople()).single.voiceprintCount, 1);
+      expect((await repository.listPeople()).single.activeRecordingCount, 1);
+
+      await repository.renamePerson(personId, 'Alicia');
+      expect(
+        (await repository.speakerNameDetails(recording.id, 0))!.name,
+        'Alicia',
+      );
+      await repository.deletePerson(personId);
+
+      final retained = await repository.speakerNameDetails(recording.id, 0);
+      expect(retained!.name, 'Alicia');
+      expect(retained.source, 'confirmed');
+      expect(retained.personId, isNull);
+      expect(await repository.listPeople(), isEmpty);
+      expect(await database.select(database.personVoiceprints).get(), isEmpty);
+    },
+  );
+
+  test(
+    'empty manual names block rematching and stale auto names are removed',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'rexorder-voiceprint-overrides-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final database = AppDatabase.memory();
+      addTearDown(database.close);
+      final repository = RecordingRepository(database, directory);
+      final recording = await repository.createRecording(
+        id: 'voiceprint-overrides',
+      );
+      final run = await repository.createTranscriptionRun(
+        recordingId: recording.id,
+        status: TranscriptionStatus.done,
+        activate: true,
+      );
+      final personId = await repository.createPerson('Alice');
+      await repository.saveRunSpeakerEmbeddings(run.id, [
+        SpeakerRunEmbedding(
+          runId: run.id,
+          speaker: 0,
+          embedding: Float32List.fromList([1, 0]),
+          speechMs: 4000,
+        ),
+      ]);
+      await database
+          .into(database.personVoiceprints)
+          .insert(
+            PersonVoiceprintsCompanion.insert(
+              personId: personId,
+              embedding: Uint8List.fromList([0, 0, 128, 63, 0, 0, 0, 0]),
+              speechMs: 4000,
+              createdAt: DateTime.utc(2026),
+            ),
+          );
+      await database
+          .into(database.speakerNames)
+          .insert(
+            SpeakerNamesCompanion.insert(
+              recordingId: recording.id,
+              runId: run.id,
+              speaker: 0,
+              name: 'Alice',
+              personId: Value(personId),
+              source: const Value('auto'),
+              matchScore: const Value(1),
+            ),
+          );
+      await repository.rematchAll();
+      expect(
+        (await repository.speakerNameDetails(recording.id, 0))!.source,
+        'auto',
+      );
+
+      await repository.setSpeakerName(
+        recordingId: recording.id,
+        speaker: 0,
+        name: '',
+      );
+      await repository.rematchAll();
+      final rejected = await repository.speakerNameDetails(recording.id, 0);
+      expect(rejected!.name, '');
+      expect(rejected.source, 'manual');
+      expect(await repository.speakerNames(recording.id), isEmpty);
+
+      await repository.setSpeakerName(
+        recordingId: recording.id,
+        speaker: 0,
+        name: 'Alice',
+      );
+      await database
+          .into(database.speakerNames)
+          .insertOnConflictUpdate(
+            SpeakerNamesCompanion.insert(
+              recordingId: recording.id,
+              runId: run.id,
+              speaker: 0,
+              name: 'Alice',
+              personId: Value(personId),
+              source: const Value('auto'),
+              matchScore: const Value(1),
+            ),
+          );
+      await repository.saveRunSpeakerEmbeddings(run.id, const []);
+      await repository.rematchAll();
+      expect(await repository.speakerNameDetails(recording.id, 0), isNull);
+    },
+  );
 }

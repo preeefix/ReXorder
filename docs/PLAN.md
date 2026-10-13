@@ -43,6 +43,10 @@ Language note: a recording that switches EN↔JA between sentences or turns tran
 4. **Transcript tools and charging-aware transcription**: export transcripts as TXT/SRT/VTT/JSON or copy text; search titles and transcript text with timestamp-linked results; add, rename, and delete recording bookmarks; and optionally pause resumable transcription until the phone is charging.
 5. **Run history and comparison**: preserve each model/language/speaker configuration as a separate transcription run, keep the last successful run visible during retries, and compare aligned segment text with token-level differences.
 
+## Voiceprints
+
+On-device voiceprints match named speakers across recordings using the imported speaker-embedding model. Voiceprints are biometric data stored only on device. voiceprints are biometric data, stored only on device; a Play Store build would need a data-safety disclosure.
+
 ## Play Store: technical requirements (not planned yet)
 Items to re-check against current Play policy when the time comes:
 - **Format**: AAB, not APK. Imported model files remain in app-private storage and are not part of the app bundle.

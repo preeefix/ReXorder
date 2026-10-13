@@ -1,13 +1,36 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
 
 import 'package:path/path.dart' as p;
+import 'package:sherpa_onnx/sherpa_onnx.dart';
 
 import '../asr/asr_engine.dart';
 import '../asr/diarizer.dart';
+import '../asr/streaming_wav_reader.dart';
 import '../asr/vad_segmenter.dart';
 import '../models/model_catalog.dart';
+import '../voiceprint/voiceprint_math.dart';
+
+class SpeakerTimeRange {
+  const SpeakerTimeRange(this.startMs, this.endMs);
+
+  final int startMs;
+  final int endMs;
+}
+
+class SpeakerEmbeddingResult {
+  const SpeakerEmbeddingResult({
+    required this.speaker,
+    required this.embedding,
+    required this.speechMs,
+  });
+
+  final int speaker;
+  final Float32List embedding;
+  final int speechMs;
+}
 
 abstract interface class TranscriptionProcessor {
   Future<List<SpeechSampleRange>> segment(File wavFile, String vadModelPath);
@@ -18,6 +41,11 @@ abstract interface class TranscriptionProcessor {
     required int? speakerCountHint,
     required void Function(int done, int total) onProgress,
   });
+  Future<List<SpeakerEmbeddingResult>> embedSpeakers(
+    File wavFile,
+    Map<int, List<SpeakerTimeRange>> ranges,
+    String embeddingModelPath,
+  );
   Future<void> openModel({
     required CatalogModel model,
     required String language,
@@ -148,6 +176,40 @@ class TranscriptionWorker implements TranscriptionProcessor {
   }
 
   @override
+  Future<List<SpeakerEmbeddingResult>> embedSpeakers(
+    File wavFile,
+    Map<int, List<SpeakerTimeRange>> ranges,
+    String embeddingModelPath,
+  ) async {
+    final value =
+        await _request(
+              'embedSpeakers',
+              data: {
+                'wavPath': wavFile.path,
+                'embeddingModelPath': embeddingModelPath,
+                'ranges': {
+                  for (final entry in ranges.entries)
+                    entry.key: [
+                      for (final range in entry.value)
+                        {'startMs': range.startMs, 'endMs': range.endMs},
+                    ],
+                },
+              },
+            )
+            as List<Object?>;
+    return [
+      for (final item in value)
+        SpeakerEmbeddingResult(
+          speaker: (item as Map<Object?, Object?>)['speaker']! as int,
+          embedding: Float32List.fromList(
+            ((item)['embedding']! as List<Object?>).cast<double>(),
+          ),
+          speechMs: (item)['speechMs']! as int,
+        ),
+    ];
+  }
+
+  @override
   Future<void> openModel({
     required CatalogModel model,
     required String language,
@@ -226,6 +288,7 @@ void _transcriptionWorkerMain(List<Object?> arguments) {
             'progress': [done, total],
           }),
         ),
+        'embedSpeakers' => await _embedSpeakers(request),
         'openModel' => _openModel(
           modelsDirectory,
           request,
@@ -254,6 +317,81 @@ void _transcriptionWorkerMain(List<Object?> arguments) {
       (_) => handle(message as Map<Object?, Object?>),
     );
   });
+}
+
+Future<List<Map<String, Object>>> _embedSpeakers(
+  Map<Object?, Object?> request,
+) async {
+  initBindings();
+  final extractor = SpeakerEmbeddingExtractor(
+    config: SpeakerEmbeddingExtractorConfig(
+      model: request['embeddingModelPath']! as String,
+      numThreads: 1,
+      debug: false,
+      provider: 'cpu',
+    ),
+  );
+  final reader = StreamingWavReader(File(request['wavPath']! as String));
+  final input = request['ranges']! as Map<Object?, Object?>;
+  final output = <Map<String, Object>>[];
+  try {
+    for (final entry in input.entries) {
+      final speaker = entry.key! as int;
+      final speakerRanges =
+          (entry.value! as List<Object?>)
+              .map((raw) {
+                final range = raw as Map<Object?, Object?>;
+                return SpeakerTimeRange(
+                  range['startMs']! as int,
+                  range['endMs']! as int,
+                );
+              })
+              .where((range) => range.endMs - range.startMs >= 1500)
+              .toList()
+            ..sort(
+              (left, right) => (right.endMs - right.startMs).compareTo(
+                left.endMs - left.startMs,
+              ),
+            );
+      final segments = <WeightedEmbedding>[];
+      var speechMs = 0;
+      for (final range in speakerRanges) {
+        final remaining = 30000 - speechMs;
+        if (remaining <= 0) break;
+        final duration = (range.endMs - range.startMs)
+            .clamp(0, remaining)
+            .toInt();
+        final startSample = range.startMs * 16000 ~/ 1000;
+        final endSample = (range.startMs + duration) * 16000 ~/ 1000;
+        if (endSample <= startSample) continue;
+        final samples = await reader.readSamples(startSample, endSample);
+        final stream = extractor.createStream();
+        try {
+          stream.acceptWaveform(samples: samples, sampleRate: 16000);
+          stream.inputFinished();
+          if (!extractor.isReady(stream)) continue;
+          final embedding = extractor.compute(stream);
+          if (embedding.isEmpty) continue;
+          segments.add(
+            WeightedEmbedding(normalizeEmbedding(embedding), duration),
+          );
+          speechMs += duration;
+        } finally {
+          stream.free();
+        }
+      }
+      if (segments.isEmpty) continue;
+      final embedding = weightedMeanEmbedding(segments);
+      output.add({
+        'speaker': speaker,
+        'embedding': embedding,
+        'speechMs': speechMs,
+      });
+    }
+    return output;
+  } finally {
+    extractor.free();
+  }
 }
 
 Future<List<Map<String, int>>> _diarizeAudio(

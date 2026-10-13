@@ -1523,6 +1523,1049 @@ class TranscriptionRunsCompanion extends UpdateCompanion<TranscriptionRun> {
   }
 }
 
+class $RunSpeakerEmbeddingsTable extends RunSpeakerEmbeddings
+    with TableInfo<$RunSpeakerEmbeddingsTable, RunSpeakerEmbedding> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $RunSpeakerEmbeddingsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _runIdMeta = const VerificationMeta('runId');
+  @override
+  late final GeneratedColumn<String> runId = GeneratedColumn<String>(
+    'run_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _speakerMeta = const VerificationMeta(
+    'speaker',
+  );
+  @override
+  late final GeneratedColumn<int> speaker = GeneratedColumn<int>(
+    'speaker',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _embeddingMeta = const VerificationMeta(
+    'embedding',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> embedding = GeneratedColumn<Uint8List>(
+    'embedding',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _speechMsMeta = const VerificationMeta(
+    'speechMs',
+  );
+  @override
+  late final GeneratedColumn<int> speechMs = GeneratedColumn<int>(
+    'speech_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [runId, speaker, embedding, speechMs];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'run_speaker_embeddings';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<RunSpeakerEmbedding> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('run_id')) {
+      context.handle(
+        _runIdMeta,
+        runId.isAcceptableOrUnknown(data['run_id']!, _runIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_runIdMeta);
+    }
+    if (data.containsKey('speaker')) {
+      context.handle(
+        _speakerMeta,
+        speaker.isAcceptableOrUnknown(data['speaker']!, _speakerMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_speakerMeta);
+    }
+    if (data.containsKey('embedding')) {
+      context.handle(
+        _embeddingMeta,
+        embedding.isAcceptableOrUnknown(data['embedding']!, _embeddingMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_embeddingMeta);
+    }
+    if (data.containsKey('speech_ms')) {
+      context.handle(
+        _speechMsMeta,
+        speechMs.isAcceptableOrUnknown(data['speech_ms']!, _speechMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_speechMsMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {runId, speaker};
+  @override
+  RunSpeakerEmbedding map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return RunSpeakerEmbedding(
+      runId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}run_id'],
+      )!,
+      speaker: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}speaker'],
+      )!,
+      embedding: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}embedding'],
+      )!,
+      speechMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}speech_ms'],
+      )!,
+    );
+  }
+
+  @override
+  $RunSpeakerEmbeddingsTable createAlias(String alias) {
+    return $RunSpeakerEmbeddingsTable(attachedDatabase, alias);
+  }
+}
+
+class RunSpeakerEmbedding extends DataClass
+    implements Insertable<RunSpeakerEmbedding> {
+  final String runId;
+  final int speaker;
+  final Uint8List embedding;
+  final int speechMs;
+  const RunSpeakerEmbedding({
+    required this.runId,
+    required this.speaker,
+    required this.embedding,
+    required this.speechMs,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['run_id'] = Variable<String>(runId);
+    map['speaker'] = Variable<int>(speaker);
+    map['embedding'] = Variable<Uint8List>(embedding);
+    map['speech_ms'] = Variable<int>(speechMs);
+    return map;
+  }
+
+  RunSpeakerEmbeddingsCompanion toCompanion(bool nullToAbsent) {
+    return RunSpeakerEmbeddingsCompanion(
+      runId: Value(runId),
+      speaker: Value(speaker),
+      embedding: Value(embedding),
+      speechMs: Value(speechMs),
+    );
+  }
+
+  factory RunSpeakerEmbedding.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return RunSpeakerEmbedding(
+      runId: serializer.fromJson<String>(json['runId']),
+      speaker: serializer.fromJson<int>(json['speaker']),
+      embedding: serializer.fromJson<Uint8List>(json['embedding']),
+      speechMs: serializer.fromJson<int>(json['speechMs']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'runId': serializer.toJson<String>(runId),
+      'speaker': serializer.toJson<int>(speaker),
+      'embedding': serializer.toJson<Uint8List>(embedding),
+      'speechMs': serializer.toJson<int>(speechMs),
+    };
+  }
+
+  RunSpeakerEmbedding copyWith({
+    String? runId,
+    int? speaker,
+    Uint8List? embedding,
+    int? speechMs,
+  }) => RunSpeakerEmbedding(
+    runId: runId ?? this.runId,
+    speaker: speaker ?? this.speaker,
+    embedding: embedding ?? this.embedding,
+    speechMs: speechMs ?? this.speechMs,
+  );
+  RunSpeakerEmbedding copyWithCompanion(RunSpeakerEmbeddingsCompanion data) {
+    return RunSpeakerEmbedding(
+      runId: data.runId.present ? data.runId.value : this.runId,
+      speaker: data.speaker.present ? data.speaker.value : this.speaker,
+      embedding: data.embedding.present ? data.embedding.value : this.embedding,
+      speechMs: data.speechMs.present ? data.speechMs.value : this.speechMs,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunSpeakerEmbedding(')
+          ..write('runId: $runId, ')
+          ..write('speaker: $speaker, ')
+          ..write('embedding: $embedding, ')
+          ..write('speechMs: $speechMs')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(runId, speaker, $driftBlobEquality.hash(embedding), speechMs);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is RunSpeakerEmbedding &&
+          other.runId == this.runId &&
+          other.speaker == this.speaker &&
+          $driftBlobEquality.equals(other.embedding, this.embedding) &&
+          other.speechMs == this.speechMs);
+}
+
+class RunSpeakerEmbeddingsCompanion
+    extends UpdateCompanion<RunSpeakerEmbedding> {
+  final Value<String> runId;
+  final Value<int> speaker;
+  final Value<Uint8List> embedding;
+  final Value<int> speechMs;
+  final Value<int> rowid;
+  const RunSpeakerEmbeddingsCompanion({
+    this.runId = const Value.absent(),
+    this.speaker = const Value.absent(),
+    this.embedding = const Value.absent(),
+    this.speechMs = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  RunSpeakerEmbeddingsCompanion.insert({
+    required String runId,
+    required int speaker,
+    required Uint8List embedding,
+    required int speechMs,
+    this.rowid = const Value.absent(),
+  }) : runId = Value(runId),
+       speaker = Value(speaker),
+       embedding = Value(embedding),
+       speechMs = Value(speechMs);
+  static Insertable<RunSpeakerEmbedding> custom({
+    Expression<String>? runId,
+    Expression<int>? speaker,
+    Expression<Uint8List>? embedding,
+    Expression<int>? speechMs,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (runId != null) 'run_id': runId,
+      if (speaker != null) 'speaker': speaker,
+      if (embedding != null) 'embedding': embedding,
+      if (speechMs != null) 'speech_ms': speechMs,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  RunSpeakerEmbeddingsCompanion copyWith({
+    Value<String>? runId,
+    Value<int>? speaker,
+    Value<Uint8List>? embedding,
+    Value<int>? speechMs,
+    Value<int>? rowid,
+  }) {
+    return RunSpeakerEmbeddingsCompanion(
+      runId: runId ?? this.runId,
+      speaker: speaker ?? this.speaker,
+      embedding: embedding ?? this.embedding,
+      speechMs: speechMs ?? this.speechMs,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (runId.present) {
+      map['run_id'] = Variable<String>(runId.value);
+    }
+    if (speaker.present) {
+      map['speaker'] = Variable<int>(speaker.value);
+    }
+    if (embedding.present) {
+      map['embedding'] = Variable<Uint8List>(embedding.value);
+    }
+    if (speechMs.present) {
+      map['speech_ms'] = Variable<int>(speechMs.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('RunSpeakerEmbeddingsCompanion(')
+          ..write('runId: $runId, ')
+          ..write('speaker: $speaker, ')
+          ..write('embedding: $embedding, ')
+          ..write('speechMs: $speechMs, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PeopleTable extends People with TableInfo<$PeopleTable, PeopleData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PeopleTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, name, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'people';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PeopleData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PeopleData map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PeopleData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PeopleTable createAlias(String alias) {
+    return $PeopleTable(attachedDatabase, alias);
+  }
+}
+
+class PeopleData extends DataClass implements Insertable<PeopleData> {
+  final String id;
+  final String name;
+  final DateTime createdAt;
+  const PeopleData({
+    required this.id,
+    required this.name,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PeopleCompanion toCompanion(bool nullToAbsent) {
+    return PeopleCompanion(
+      id: Value(id),
+      name: Value(name),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PeopleData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PeopleData(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  PeopleData copyWith({String? id, String? name, DateTime? createdAt}) =>
+      PeopleData(
+        id: id ?? this.id,
+        name: name ?? this.name,
+        createdAt: createdAt ?? this.createdAt,
+      );
+  PeopleData copyWithCompanion(PeopleCompanion data) {
+    return PeopleData(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PeopleData(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, name, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PeopleData &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.createdAt == this.createdAt);
+}
+
+class PeopleCompanion extends UpdateCompanion<PeopleData> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const PeopleCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  PeopleCompanion.insert({
+    required String id,
+    required String name,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       createdAt = Value(createdAt);
+  static Insertable<PeopleData> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  PeopleCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return PeopleCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PeopleCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
+class $PersonVoiceprintsTable extends PersonVoiceprints
+    with TableInfo<$PersonVoiceprintsTable, PersonVoiceprint> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $PersonVoiceprintsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _personIdMeta = const VerificationMeta(
+    'personId',
+  );
+  @override
+  late final GeneratedColumn<String> personId = GeneratedColumn<String>(
+    'person_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _embeddingMeta = const VerificationMeta(
+    'embedding',
+  );
+  @override
+  late final GeneratedColumn<Uint8List> embedding = GeneratedColumn<Uint8List>(
+    'embedding',
+    aliasedName,
+    false,
+    type: DriftSqlType.blob,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _sourceRunIdMeta = const VerificationMeta(
+    'sourceRunId',
+  );
+  @override
+  late final GeneratedColumn<String> sourceRunId = GeneratedColumn<String>(
+    'source_run_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sourceSpeakerMeta = const VerificationMeta(
+    'sourceSpeaker',
+  );
+  @override
+  late final GeneratedColumn<int> sourceSpeaker = GeneratedColumn<int>(
+    'source_speaker',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _speechMsMeta = const VerificationMeta(
+    'speechMs',
+  );
+  @override
+  late final GeneratedColumn<int> speechMs = GeneratedColumn<int>(
+    'speech_ms',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    personId,
+    embedding,
+    sourceRunId,
+    sourceSpeaker,
+    speechMs,
+    createdAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'person_voiceprints';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<PersonVoiceprint> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('person_id')) {
+      context.handle(
+        _personIdMeta,
+        personId.isAcceptableOrUnknown(data['person_id']!, _personIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_personIdMeta);
+    }
+    if (data.containsKey('embedding')) {
+      context.handle(
+        _embeddingMeta,
+        embedding.isAcceptableOrUnknown(data['embedding']!, _embeddingMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_embeddingMeta);
+    }
+    if (data.containsKey('source_run_id')) {
+      context.handle(
+        _sourceRunIdMeta,
+        sourceRunId.isAcceptableOrUnknown(
+          data['source_run_id']!,
+          _sourceRunIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('source_speaker')) {
+      context.handle(
+        _sourceSpeakerMeta,
+        sourceSpeaker.isAcceptableOrUnknown(
+          data['source_speaker']!,
+          _sourceSpeakerMeta,
+        ),
+      );
+    }
+    if (data.containsKey('speech_ms')) {
+      context.handle(
+        _speechMsMeta,
+        speechMs.isAcceptableOrUnknown(data['speech_ms']!, _speechMsMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_speechMsMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  PersonVoiceprint map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return PersonVoiceprint(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      personId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}person_id'],
+      )!,
+      embedding: attachedDatabase.typeMapping.read(
+        DriftSqlType.blob,
+        data['${effectivePrefix}embedding'],
+      )!,
+      sourceRunId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_run_id'],
+      ),
+      sourceSpeaker: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}source_speaker'],
+      ),
+      speechMs: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}speech_ms'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $PersonVoiceprintsTable createAlias(String alias) {
+    return $PersonVoiceprintsTable(attachedDatabase, alias);
+  }
+}
+
+class PersonVoiceprint extends DataClass
+    implements Insertable<PersonVoiceprint> {
+  final int id;
+  final String personId;
+  final Uint8List embedding;
+  final String? sourceRunId;
+  final int? sourceSpeaker;
+  final int speechMs;
+  final DateTime createdAt;
+  const PersonVoiceprint({
+    required this.id,
+    required this.personId,
+    required this.embedding,
+    this.sourceRunId,
+    this.sourceSpeaker,
+    required this.speechMs,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    map['person_id'] = Variable<String>(personId);
+    map['embedding'] = Variable<Uint8List>(embedding);
+    if (!nullToAbsent || sourceRunId != null) {
+      map['source_run_id'] = Variable<String>(sourceRunId);
+    }
+    if (!nullToAbsent || sourceSpeaker != null) {
+      map['source_speaker'] = Variable<int>(sourceSpeaker);
+    }
+    map['speech_ms'] = Variable<int>(speechMs);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  PersonVoiceprintsCompanion toCompanion(bool nullToAbsent) {
+    return PersonVoiceprintsCompanion(
+      id: Value(id),
+      personId: Value(personId),
+      embedding: Value(embedding),
+      sourceRunId: sourceRunId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceRunId),
+      sourceSpeaker: sourceSpeaker == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sourceSpeaker),
+      speechMs: Value(speechMs),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory PersonVoiceprint.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return PersonVoiceprint(
+      id: serializer.fromJson<int>(json['id']),
+      personId: serializer.fromJson<String>(json['personId']),
+      embedding: serializer.fromJson<Uint8List>(json['embedding']),
+      sourceRunId: serializer.fromJson<String?>(json['sourceRunId']),
+      sourceSpeaker: serializer.fromJson<int?>(json['sourceSpeaker']),
+      speechMs: serializer.fromJson<int>(json['speechMs']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'personId': serializer.toJson<String>(personId),
+      'embedding': serializer.toJson<Uint8List>(embedding),
+      'sourceRunId': serializer.toJson<String?>(sourceRunId),
+      'sourceSpeaker': serializer.toJson<int?>(sourceSpeaker),
+      'speechMs': serializer.toJson<int>(speechMs),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  PersonVoiceprint copyWith({
+    int? id,
+    String? personId,
+    Uint8List? embedding,
+    Value<String?> sourceRunId = const Value.absent(),
+    Value<int?> sourceSpeaker = const Value.absent(),
+    int? speechMs,
+    DateTime? createdAt,
+  }) => PersonVoiceprint(
+    id: id ?? this.id,
+    personId: personId ?? this.personId,
+    embedding: embedding ?? this.embedding,
+    sourceRunId: sourceRunId.present ? sourceRunId.value : this.sourceRunId,
+    sourceSpeaker: sourceSpeaker.present
+        ? sourceSpeaker.value
+        : this.sourceSpeaker,
+    speechMs: speechMs ?? this.speechMs,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  PersonVoiceprint copyWithCompanion(PersonVoiceprintsCompanion data) {
+    return PersonVoiceprint(
+      id: data.id.present ? data.id.value : this.id,
+      personId: data.personId.present ? data.personId.value : this.personId,
+      embedding: data.embedding.present ? data.embedding.value : this.embedding,
+      sourceRunId: data.sourceRunId.present
+          ? data.sourceRunId.value
+          : this.sourceRunId,
+      sourceSpeaker: data.sourceSpeaker.present
+          ? data.sourceSpeaker.value
+          : this.sourceSpeaker,
+      speechMs: data.speechMs.present ? data.speechMs.value : this.speechMs,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PersonVoiceprint(')
+          ..write('id: $id, ')
+          ..write('personId: $personId, ')
+          ..write('embedding: $embedding, ')
+          ..write('sourceRunId: $sourceRunId, ')
+          ..write('sourceSpeaker: $sourceSpeaker, ')
+          ..write('speechMs: $speechMs, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    personId,
+    $driftBlobEquality.hash(embedding),
+    sourceRunId,
+    sourceSpeaker,
+    speechMs,
+    createdAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is PersonVoiceprint &&
+          other.id == this.id &&
+          other.personId == this.personId &&
+          $driftBlobEquality.equals(other.embedding, this.embedding) &&
+          other.sourceRunId == this.sourceRunId &&
+          other.sourceSpeaker == this.sourceSpeaker &&
+          other.speechMs == this.speechMs &&
+          other.createdAt == this.createdAt);
+}
+
+class PersonVoiceprintsCompanion extends UpdateCompanion<PersonVoiceprint> {
+  final Value<int> id;
+  final Value<String> personId;
+  final Value<Uint8List> embedding;
+  final Value<String?> sourceRunId;
+  final Value<int?> sourceSpeaker;
+  final Value<int> speechMs;
+  final Value<DateTime> createdAt;
+  const PersonVoiceprintsCompanion({
+    this.id = const Value.absent(),
+    this.personId = const Value.absent(),
+    this.embedding = const Value.absent(),
+    this.sourceRunId = const Value.absent(),
+    this.sourceSpeaker = const Value.absent(),
+    this.speechMs = const Value.absent(),
+    this.createdAt = const Value.absent(),
+  });
+  PersonVoiceprintsCompanion.insert({
+    this.id = const Value.absent(),
+    required String personId,
+    required Uint8List embedding,
+    this.sourceRunId = const Value.absent(),
+    this.sourceSpeaker = const Value.absent(),
+    required int speechMs,
+    required DateTime createdAt,
+  }) : personId = Value(personId),
+       embedding = Value(embedding),
+       speechMs = Value(speechMs),
+       createdAt = Value(createdAt);
+  static Insertable<PersonVoiceprint> custom({
+    Expression<int>? id,
+    Expression<String>? personId,
+    Expression<Uint8List>? embedding,
+    Expression<String>? sourceRunId,
+    Expression<int>? sourceSpeaker,
+    Expression<int>? speechMs,
+    Expression<DateTime>? createdAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (personId != null) 'person_id': personId,
+      if (embedding != null) 'embedding': embedding,
+      if (sourceRunId != null) 'source_run_id': sourceRunId,
+      if (sourceSpeaker != null) 'source_speaker': sourceSpeaker,
+      if (speechMs != null) 'speech_ms': speechMs,
+      if (createdAt != null) 'created_at': createdAt,
+    });
+  }
+
+  PersonVoiceprintsCompanion copyWith({
+    Value<int>? id,
+    Value<String>? personId,
+    Value<Uint8List>? embedding,
+    Value<String?>? sourceRunId,
+    Value<int?>? sourceSpeaker,
+    Value<int>? speechMs,
+    Value<DateTime>? createdAt,
+  }) {
+    return PersonVoiceprintsCompanion(
+      id: id ?? this.id,
+      personId: personId ?? this.personId,
+      embedding: embedding ?? this.embedding,
+      sourceRunId: sourceRunId ?? this.sourceRunId,
+      sourceSpeaker: sourceSpeaker ?? this.sourceSpeaker,
+      speechMs: speechMs ?? this.speechMs,
+      createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (personId.present) {
+      map['person_id'] = Variable<String>(personId.value);
+    }
+    if (embedding.present) {
+      map['embedding'] = Variable<Uint8List>(embedding.value);
+    }
+    if (sourceRunId.present) {
+      map['source_run_id'] = Variable<String>(sourceRunId.value);
+    }
+    if (sourceSpeaker.present) {
+      map['source_speaker'] = Variable<int>(sourceSpeaker.value);
+    }
+    if (speechMs.present) {
+      map['speech_ms'] = Variable<int>(speechMs.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('PersonVoiceprintsCompanion(')
+          ..write('id: $id, ')
+          ..write('personId: $personId, ')
+          ..write('embedding: $embedding, ')
+          ..write('sourceRunId: $sourceRunId, ')
+          ..write('sourceSpeaker: $sourceSpeaker, ')
+          ..write('speechMs: $speechMs, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 class $TranscriptSegmentsTable extends TranscriptSegments
     with TableInfo<$TranscriptSegmentsTable, TranscriptSegment> {
   @override
@@ -2123,8 +3166,48 @@ class $SpeakerNamesTable extends SpeakerNames
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _personIdMeta = const VerificationMeta(
+    'personId',
+  );
   @override
-  List<GeneratedColumn> get $columns => [recordingId, runId, speaker, name];
+  late final GeneratedColumn<String> personId = GeneratedColumn<String>(
+    'person_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sourceMeta = const VerificationMeta('source');
+  @override
+  late final GeneratedColumn<String> source = GeneratedColumn<String>(
+    'source',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('manual'),
+  );
+  static const VerificationMeta _matchScoreMeta = const VerificationMeta(
+    'matchScore',
+  );
+  @override
+  late final GeneratedColumn<double> matchScore = GeneratedColumn<double>(
+    'match_score',
+    aliasedName,
+    true,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    recordingId,
+    runId,
+    speaker,
+    name,
+    personId,
+    source,
+    matchScore,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -2172,6 +3255,24 @@ class $SpeakerNamesTable extends SpeakerNames
     } else if (isInserting) {
       context.missing(_nameMeta);
     }
+    if (data.containsKey('person_id')) {
+      context.handle(
+        _personIdMeta,
+        personId.isAcceptableOrUnknown(data['person_id']!, _personIdMeta),
+      );
+    }
+    if (data.containsKey('source')) {
+      context.handle(
+        _sourceMeta,
+        source.isAcceptableOrUnknown(data['source']!, _sourceMeta),
+      );
+    }
+    if (data.containsKey('match_score')) {
+      context.handle(
+        _matchScoreMeta,
+        matchScore.isAcceptableOrUnknown(data['match_score']!, _matchScoreMeta),
+      );
+    }
     return context;
   }
 
@@ -2197,6 +3298,18 @@ class $SpeakerNamesTable extends SpeakerNames
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
+      personId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}person_id'],
+      ),
+      source: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source'],
+      )!,
+      matchScore: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}match_score'],
+      ),
     );
   }
 
@@ -2211,11 +3324,17 @@ class SpeakerName extends DataClass implements Insertable<SpeakerName> {
   final String runId;
   final int speaker;
   final String name;
+  final String? personId;
+  final String source;
+  final double? matchScore;
   const SpeakerName({
     required this.recordingId,
     required this.runId,
     required this.speaker,
     required this.name,
+    this.personId,
+    required this.source,
+    this.matchScore,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -2224,6 +3343,13 @@ class SpeakerName extends DataClass implements Insertable<SpeakerName> {
     map['run_id'] = Variable<String>(runId);
     map['speaker'] = Variable<int>(speaker);
     map['name'] = Variable<String>(name);
+    if (!nullToAbsent || personId != null) {
+      map['person_id'] = Variable<String>(personId);
+    }
+    map['source'] = Variable<String>(source);
+    if (!nullToAbsent || matchScore != null) {
+      map['match_score'] = Variable<double>(matchScore);
+    }
     return map;
   }
 
@@ -2233,6 +3359,13 @@ class SpeakerName extends DataClass implements Insertable<SpeakerName> {
       runId: Value(runId),
       speaker: Value(speaker),
       name: Value(name),
+      personId: personId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(personId),
+      source: Value(source),
+      matchScore: matchScore == null && nullToAbsent
+          ? const Value.absent()
+          : Value(matchScore),
     );
   }
 
@@ -2246,6 +3379,9 @@ class SpeakerName extends DataClass implements Insertable<SpeakerName> {
       runId: serializer.fromJson<String>(json['runId']),
       speaker: serializer.fromJson<int>(json['speaker']),
       name: serializer.fromJson<String>(json['name']),
+      personId: serializer.fromJson<String?>(json['personId']),
+      source: serializer.fromJson<String>(json['source']),
+      matchScore: serializer.fromJson<double?>(json['matchScore']),
     );
   }
   @override
@@ -2256,6 +3392,9 @@ class SpeakerName extends DataClass implements Insertable<SpeakerName> {
       'runId': serializer.toJson<String>(runId),
       'speaker': serializer.toJson<int>(speaker),
       'name': serializer.toJson<String>(name),
+      'personId': serializer.toJson<String?>(personId),
+      'source': serializer.toJson<String>(source),
+      'matchScore': serializer.toJson<double?>(matchScore),
     };
   }
 
@@ -2264,11 +3403,17 @@ class SpeakerName extends DataClass implements Insertable<SpeakerName> {
     String? runId,
     int? speaker,
     String? name,
+    Value<String?> personId = const Value.absent(),
+    String? source,
+    Value<double?> matchScore = const Value.absent(),
   }) => SpeakerName(
     recordingId: recordingId ?? this.recordingId,
     runId: runId ?? this.runId,
     speaker: speaker ?? this.speaker,
     name: name ?? this.name,
+    personId: personId.present ? personId.value : this.personId,
+    source: source ?? this.source,
+    matchScore: matchScore.present ? matchScore.value : this.matchScore,
   );
   SpeakerName copyWithCompanion(SpeakerNamesCompanion data) {
     return SpeakerName(
@@ -2278,6 +3423,11 @@ class SpeakerName extends DataClass implements Insertable<SpeakerName> {
       runId: data.runId.present ? data.runId.value : this.runId,
       speaker: data.speaker.present ? data.speaker.value : this.speaker,
       name: data.name.present ? data.name.value : this.name,
+      personId: data.personId.present ? data.personId.value : this.personId,
+      source: data.source.present ? data.source.value : this.source,
+      matchScore: data.matchScore.present
+          ? data.matchScore.value
+          : this.matchScore,
     );
   }
 
@@ -2287,13 +3437,24 @@ class SpeakerName extends DataClass implements Insertable<SpeakerName> {
           ..write('recordingId: $recordingId, ')
           ..write('runId: $runId, ')
           ..write('speaker: $speaker, ')
-          ..write('name: $name')
+          ..write('name: $name, ')
+          ..write('personId: $personId, ')
+          ..write('source: $source, ')
+          ..write('matchScore: $matchScore')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(recordingId, runId, speaker, name);
+  int get hashCode => Object.hash(
+    recordingId,
+    runId,
+    speaker,
+    name,
+    personId,
+    source,
+    matchScore,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -2301,7 +3462,10 @@ class SpeakerName extends DataClass implements Insertable<SpeakerName> {
           other.recordingId == this.recordingId &&
           other.runId == this.runId &&
           other.speaker == this.speaker &&
-          other.name == this.name);
+          other.name == this.name &&
+          other.personId == this.personId &&
+          other.source == this.source &&
+          other.matchScore == this.matchScore);
 }
 
 class SpeakerNamesCompanion extends UpdateCompanion<SpeakerName> {
@@ -2309,12 +3473,18 @@ class SpeakerNamesCompanion extends UpdateCompanion<SpeakerName> {
   final Value<String> runId;
   final Value<int> speaker;
   final Value<String> name;
+  final Value<String?> personId;
+  final Value<String> source;
+  final Value<double?> matchScore;
   final Value<int> rowid;
   const SpeakerNamesCompanion({
     this.recordingId = const Value.absent(),
     this.runId = const Value.absent(),
     this.speaker = const Value.absent(),
     this.name = const Value.absent(),
+    this.personId = const Value.absent(),
+    this.source = const Value.absent(),
+    this.matchScore = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   SpeakerNamesCompanion.insert({
@@ -2322,6 +3492,9 @@ class SpeakerNamesCompanion extends UpdateCompanion<SpeakerName> {
     required String runId,
     required int speaker,
     required String name,
+    this.personId = const Value.absent(),
+    this.source = const Value.absent(),
+    this.matchScore = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : recordingId = Value(recordingId),
        runId = Value(runId),
@@ -2332,6 +3505,9 @@ class SpeakerNamesCompanion extends UpdateCompanion<SpeakerName> {
     Expression<String>? runId,
     Expression<int>? speaker,
     Expression<String>? name,
+    Expression<String>? personId,
+    Expression<String>? source,
+    Expression<double>? matchScore,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2339,6 +3515,9 @@ class SpeakerNamesCompanion extends UpdateCompanion<SpeakerName> {
       if (runId != null) 'run_id': runId,
       if (speaker != null) 'speaker': speaker,
       if (name != null) 'name': name,
+      if (personId != null) 'person_id': personId,
+      if (source != null) 'source': source,
+      if (matchScore != null) 'match_score': matchScore,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2348,6 +3527,9 @@ class SpeakerNamesCompanion extends UpdateCompanion<SpeakerName> {
     Value<String>? runId,
     Value<int>? speaker,
     Value<String>? name,
+    Value<String?>? personId,
+    Value<String>? source,
+    Value<double?>? matchScore,
     Value<int>? rowid,
   }) {
     return SpeakerNamesCompanion(
@@ -2355,6 +3537,9 @@ class SpeakerNamesCompanion extends UpdateCompanion<SpeakerName> {
       runId: runId ?? this.runId,
       speaker: speaker ?? this.speaker,
       name: name ?? this.name,
+      personId: personId ?? this.personId,
+      source: source ?? this.source,
+      matchScore: matchScore ?? this.matchScore,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2374,6 +3559,15 @@ class SpeakerNamesCompanion extends UpdateCompanion<SpeakerName> {
     if (name.present) {
       map['name'] = Variable<String>(name.value);
     }
+    if (personId.present) {
+      map['person_id'] = Variable<String>(personId.value);
+    }
+    if (source.present) {
+      map['source'] = Variable<String>(source.value);
+    }
+    if (matchScore.present) {
+      map['match_score'] = Variable<double>(matchScore.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2387,6 +3581,9 @@ class SpeakerNamesCompanion extends UpdateCompanion<SpeakerName> {
           ..write('runId: $runId, ')
           ..write('speaker: $speaker, ')
           ..write('name: $name, ')
+          ..write('personId: $personId, ')
+          ..write('source: $source, ')
+          ..write('matchScore: $matchScore, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -2758,6 +3955,11 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $RecordingsTable recordings = $RecordingsTable(this);
   late final $TranscriptionRunsTable transcriptionRuns =
       $TranscriptionRunsTable(this);
+  late final $RunSpeakerEmbeddingsTable runSpeakerEmbeddings =
+      $RunSpeakerEmbeddingsTable(this);
+  late final $PeopleTable people = $PeopleTable(this);
+  late final $PersonVoiceprintsTable personVoiceprints =
+      $PersonVoiceprintsTable(this);
   late final $TranscriptSegmentsTable transcriptSegments =
       $TranscriptSegmentsTable(this);
   late final $SpeakerNamesTable speakerNames = $SpeakerNamesTable(this);
@@ -2769,6 +3971,9 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     recordings,
     transcriptionRuns,
+    runSpeakerEmbeddings,
+    people,
+    personVoiceprints,
     transcriptSegments,
     speakerNames,
     bookmarks,
@@ -3515,6 +4720,637 @@ typedef $$TranscriptionRunsTableProcessedTableManager =
       TranscriptionRun,
       PrefetchHooks Function()
     >;
+typedef $$RunSpeakerEmbeddingsTableCreateCompanionBuilder =
+    RunSpeakerEmbeddingsCompanion Function({
+      required String runId,
+      required int speaker,
+      required Uint8List embedding,
+      required int speechMs,
+      Value<int> rowid,
+    });
+typedef $$RunSpeakerEmbeddingsTableUpdateCompanionBuilder =
+    RunSpeakerEmbeddingsCompanion Function({
+      Value<String> runId,
+      Value<int> speaker,
+      Value<Uint8List> embedding,
+      Value<int> speechMs,
+      Value<int> rowid,
+    });
+
+class $$RunSpeakerEmbeddingsTableFilterComposer
+    extends Composer<_$AppDatabase, $RunSpeakerEmbeddingsTable> {
+  $$RunSpeakerEmbeddingsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get runId => $composableBuilder(
+    column: $table.runId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get speaker => $composableBuilder(
+    column: $table.speaker,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get embedding => $composableBuilder(
+    column: $table.embedding,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get speechMs => $composableBuilder(
+    column: $table.speechMs,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$RunSpeakerEmbeddingsTableOrderingComposer
+    extends Composer<_$AppDatabase, $RunSpeakerEmbeddingsTable> {
+  $$RunSpeakerEmbeddingsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get runId => $composableBuilder(
+    column: $table.runId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get speaker => $composableBuilder(
+    column: $table.speaker,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get embedding => $composableBuilder(
+    column: $table.embedding,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get speechMs => $composableBuilder(
+    column: $table.speechMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$RunSpeakerEmbeddingsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $RunSpeakerEmbeddingsTable> {
+  $$RunSpeakerEmbeddingsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get runId =>
+      $composableBuilder(column: $table.runId, builder: (column) => column);
+
+  GeneratedColumn<int> get speaker =>
+      $composableBuilder(column: $table.speaker, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get embedding =>
+      $composableBuilder(column: $table.embedding, builder: (column) => column);
+
+  GeneratedColumn<int> get speechMs =>
+      $composableBuilder(column: $table.speechMs, builder: (column) => column);
+}
+
+class $$RunSpeakerEmbeddingsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $RunSpeakerEmbeddingsTable,
+          RunSpeakerEmbedding,
+          $$RunSpeakerEmbeddingsTableFilterComposer,
+          $$RunSpeakerEmbeddingsTableOrderingComposer,
+          $$RunSpeakerEmbeddingsTableAnnotationComposer,
+          $$RunSpeakerEmbeddingsTableCreateCompanionBuilder,
+          $$RunSpeakerEmbeddingsTableUpdateCompanionBuilder,
+          (
+            RunSpeakerEmbedding,
+            BaseReferences<
+              _$AppDatabase,
+              $RunSpeakerEmbeddingsTable,
+              RunSpeakerEmbedding
+            >,
+          ),
+          RunSpeakerEmbedding,
+          PrefetchHooks Function()
+        > {
+  $$RunSpeakerEmbeddingsTableTableManager(
+    _$AppDatabase db,
+    $RunSpeakerEmbeddingsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$RunSpeakerEmbeddingsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$RunSpeakerEmbeddingsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$RunSpeakerEmbeddingsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> runId = const Value.absent(),
+                Value<int> speaker = const Value.absent(),
+                Value<Uint8List> embedding = const Value.absent(),
+                Value<int> speechMs = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => RunSpeakerEmbeddingsCompanion(
+                runId: runId,
+                speaker: speaker,
+                embedding: embedding,
+                speechMs: speechMs,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String runId,
+                required int speaker,
+                required Uint8List embedding,
+                required int speechMs,
+                Value<int> rowid = const Value.absent(),
+              }) => RunSpeakerEmbeddingsCompanion.insert(
+                runId: runId,
+                speaker: speaker,
+                embedding: embedding,
+                speechMs: speechMs,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$RunSpeakerEmbeddingsTable, RunSpeakerEmbedding>(
+                    table,
+                  ),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $RunSpeakerEmbeddingsTable,
+                    RunSpeakerEmbedding
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$RunSpeakerEmbeddingsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $RunSpeakerEmbeddingsTable,
+      RunSpeakerEmbedding,
+      $$RunSpeakerEmbeddingsTableFilterComposer,
+      $$RunSpeakerEmbeddingsTableOrderingComposer,
+      $$RunSpeakerEmbeddingsTableAnnotationComposer,
+      $$RunSpeakerEmbeddingsTableCreateCompanionBuilder,
+      $$RunSpeakerEmbeddingsTableUpdateCompanionBuilder,
+      (
+        RunSpeakerEmbedding,
+        BaseReferences<
+          _$AppDatabase,
+          $RunSpeakerEmbeddingsTable,
+          RunSpeakerEmbedding
+        >,
+      ),
+      RunSpeakerEmbedding,
+      PrefetchHooks Function()
+    >;
+typedef $$PeopleTableCreateCompanionBuilder =
+    PeopleCompanion Function({
+      required String id,
+      required String name,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$PeopleTableUpdateCompanionBuilder =
+    PeopleCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$PeopleTableFilterComposer
+    extends Composer<_$AppDatabase, $PeopleTable> {
+  $$PeopleTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PeopleTableOrderingComposer
+    extends Composer<_$AppDatabase, $PeopleTable> {
+  $$PeopleTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PeopleTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PeopleTable> {
+  $$PeopleTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$PeopleTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PeopleTable,
+          PeopleData,
+          $$PeopleTableFilterComposer,
+          $$PeopleTableOrderingComposer,
+          $$PeopleTableAnnotationComposer,
+          $$PeopleTableCreateCompanionBuilder,
+          $$PeopleTableUpdateCompanionBuilder,
+          (PeopleData, BaseReferences<_$AppDatabase, $PeopleTable, PeopleData>),
+          PeopleData,
+          PrefetchHooks Function()
+        > {
+  $$PeopleTableTableManager(_$AppDatabase db, $PeopleTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PeopleTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PeopleTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PeopleTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => PeopleCompanion(
+                id: id,
+                name: name,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => PeopleCompanion.insert(
+                id: id,
+                name: name,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$PeopleTable, PeopleData>(table),
+                  BaseReferences<_$AppDatabase, $PeopleTable, PeopleData>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PeopleTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PeopleTable,
+      PeopleData,
+      $$PeopleTableFilterComposer,
+      $$PeopleTableOrderingComposer,
+      $$PeopleTableAnnotationComposer,
+      $$PeopleTableCreateCompanionBuilder,
+      $$PeopleTableUpdateCompanionBuilder,
+      (PeopleData, BaseReferences<_$AppDatabase, $PeopleTable, PeopleData>),
+      PeopleData,
+      PrefetchHooks Function()
+    >;
+typedef $$PersonVoiceprintsTableCreateCompanionBuilder =
+    PersonVoiceprintsCompanion Function({
+      Value<int> id,
+      required String personId,
+      required Uint8List embedding,
+      Value<String?> sourceRunId,
+      Value<int?> sourceSpeaker,
+      required int speechMs,
+      required DateTime createdAt,
+    });
+typedef $$PersonVoiceprintsTableUpdateCompanionBuilder =
+    PersonVoiceprintsCompanion Function({
+      Value<int> id,
+      Value<String> personId,
+      Value<Uint8List> embedding,
+      Value<String?> sourceRunId,
+      Value<int?> sourceSpeaker,
+      Value<int> speechMs,
+      Value<DateTime> createdAt,
+    });
+
+class $$PersonVoiceprintsTableFilterComposer
+    extends Composer<_$AppDatabase, $PersonVoiceprintsTable> {
+  $$PersonVoiceprintsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get personId => $composableBuilder(
+    column: $table.personId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<Uint8List> get embedding => $composableBuilder(
+    column: $table.embedding,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceRunId => $composableBuilder(
+    column: $table.sourceRunId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get sourceSpeaker => $composableBuilder(
+    column: $table.sourceSpeaker,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get speechMs => $composableBuilder(
+    column: $table.speechMs,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$PersonVoiceprintsTableOrderingComposer
+    extends Composer<_$AppDatabase, $PersonVoiceprintsTable> {
+  $$PersonVoiceprintsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get personId => $composableBuilder(
+    column: $table.personId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<Uint8List> get embedding => $composableBuilder(
+    column: $table.embedding,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceRunId => $composableBuilder(
+    column: $table.sourceRunId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get sourceSpeaker => $composableBuilder(
+    column: $table.sourceSpeaker,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get speechMs => $composableBuilder(
+    column: $table.speechMs,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$PersonVoiceprintsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $PersonVoiceprintsTable> {
+  $$PersonVoiceprintsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get personId =>
+      $composableBuilder(column: $table.personId, builder: (column) => column);
+
+  GeneratedColumn<Uint8List> get embedding =>
+      $composableBuilder(column: $table.embedding, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceRunId => $composableBuilder(
+    column: $table.sourceRunId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get sourceSpeaker => $composableBuilder(
+    column: $table.sourceSpeaker,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get speechMs =>
+      $composableBuilder(column: $table.speechMs, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$PersonVoiceprintsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $PersonVoiceprintsTable,
+          PersonVoiceprint,
+          $$PersonVoiceprintsTableFilterComposer,
+          $$PersonVoiceprintsTableOrderingComposer,
+          $$PersonVoiceprintsTableAnnotationComposer,
+          $$PersonVoiceprintsTableCreateCompanionBuilder,
+          $$PersonVoiceprintsTableUpdateCompanionBuilder,
+          (
+            PersonVoiceprint,
+            BaseReferences<
+              _$AppDatabase,
+              $PersonVoiceprintsTable,
+              PersonVoiceprint
+            >,
+          ),
+          PersonVoiceprint,
+          PrefetchHooks Function()
+        > {
+  $$PersonVoiceprintsTableTableManager(
+    _$AppDatabase db,
+    $PersonVoiceprintsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$PersonVoiceprintsTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$PersonVoiceprintsTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$PersonVoiceprintsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<String> personId = const Value.absent(),
+                Value<Uint8List> embedding = const Value.absent(),
+                Value<String?> sourceRunId = const Value.absent(),
+                Value<int?> sourceSpeaker = const Value.absent(),
+                Value<int> speechMs = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+              }) => PersonVoiceprintsCompanion(
+                id: id,
+                personId: personId,
+                embedding: embedding,
+                sourceRunId: sourceRunId,
+                sourceSpeaker: sourceSpeaker,
+                speechMs: speechMs,
+                createdAt: createdAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                required String personId,
+                required Uint8List embedding,
+                Value<String?> sourceRunId = const Value.absent(),
+                Value<int?> sourceSpeaker = const Value.absent(),
+                required int speechMs,
+                required DateTime createdAt,
+              }) => PersonVoiceprintsCompanion.insert(
+                id: id,
+                personId: personId,
+                embedding: embedding,
+                sourceRunId: sourceRunId,
+                sourceSpeaker: sourceSpeaker,
+                speechMs: speechMs,
+                createdAt: createdAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$PersonVoiceprintsTable, PersonVoiceprint>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $PersonVoiceprintsTable,
+                    PersonVoiceprint
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$PersonVoiceprintsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $PersonVoiceprintsTable,
+      PersonVoiceprint,
+      $$PersonVoiceprintsTableFilterComposer,
+      $$PersonVoiceprintsTableOrderingComposer,
+      $$PersonVoiceprintsTableAnnotationComposer,
+      $$PersonVoiceprintsTableCreateCompanionBuilder,
+      $$PersonVoiceprintsTableUpdateCompanionBuilder,
+      (
+        PersonVoiceprint,
+        BaseReferences<
+          _$AppDatabase,
+          $PersonVoiceprintsTable,
+          PersonVoiceprint
+        >,
+      ),
+      PersonVoiceprint,
+      PrefetchHooks Function()
+    >;
 typedef $$TranscriptSegmentsTableCreateCompanionBuilder =
     TranscriptSegmentsCompanion Function({
       Value<int> id,
@@ -3817,6 +5653,9 @@ typedef $$SpeakerNamesTableCreateCompanionBuilder =
       required String runId,
       required int speaker,
       required String name,
+      Value<String?> personId,
+      Value<String> source,
+      Value<double?> matchScore,
       Value<int> rowid,
     });
 typedef $$SpeakerNamesTableUpdateCompanionBuilder =
@@ -3825,6 +5664,9 @@ typedef $$SpeakerNamesTableUpdateCompanionBuilder =
       Value<String> runId,
       Value<int> speaker,
       Value<String> name,
+      Value<String?> personId,
+      Value<String> source,
+      Value<double?> matchScore,
       Value<int> rowid,
     });
 
@@ -3854,6 +5696,21 @@ class $$SpeakerNamesTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
     column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get personId => $composableBuilder(
+    column: $table.personId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get matchScore => $composableBuilder(
+    column: $table.matchScore,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3886,6 +5743,21 @@ class $$SpeakerNamesTableOrderingComposer
     column: $table.name,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get personId => $composableBuilder(
+    column: $table.personId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get source => $composableBuilder(
+    column: $table.source,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<double> get matchScore => $composableBuilder(
+    column: $table.matchScore,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$SpeakerNamesTableAnnotationComposer
@@ -3910,6 +5782,17 @@ class $$SpeakerNamesTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get personId =>
+      $composableBuilder(column: $table.personId, builder: (column) => column);
+
+  GeneratedColumn<String> get source =>
+      $composableBuilder(column: $table.source, builder: (column) => column);
+
+  GeneratedColumn<double> get matchScore => $composableBuilder(
+    column: $table.matchScore,
+    builder: (column) => column,
+  );
 }
 
 class $$SpeakerNamesTableTableManager
@@ -3947,12 +5830,18 @@ class $$SpeakerNamesTableTableManager
                 Value<String> runId = const Value.absent(),
                 Value<int> speaker = const Value.absent(),
                 Value<String> name = const Value.absent(),
+                Value<String?> personId = const Value.absent(),
+                Value<String> source = const Value.absent(),
+                Value<double?> matchScore = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SpeakerNamesCompanion(
                 recordingId: recordingId,
                 runId: runId,
                 speaker: speaker,
                 name: name,
+                personId: personId,
+                source: source,
+                matchScore: matchScore,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3961,12 +5850,18 @@ class $$SpeakerNamesTableTableManager
                 required String runId,
                 required int speaker,
                 required String name,
+                Value<String?> personId = const Value.absent(),
+                Value<String> source = const Value.absent(),
+                Value<double?> matchScore = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => SpeakerNamesCompanion.insert(
                 recordingId: recordingId,
                 runId: runId,
                 speaker: speaker,
                 name: name,
+                personId: personId,
+                source: source,
+                matchScore: matchScore,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -4212,6 +6107,12 @@ class $AppDatabaseManager {
       $$RecordingsTableTableManager(_db, _db.recordings);
   $$TranscriptionRunsTableTableManager get transcriptionRuns =>
       $$TranscriptionRunsTableTableManager(_db, _db.transcriptionRuns);
+  $$RunSpeakerEmbeddingsTableTableManager get runSpeakerEmbeddings =>
+      $$RunSpeakerEmbeddingsTableTableManager(_db, _db.runSpeakerEmbeddings);
+  $$PeopleTableTableManager get people =>
+      $$PeopleTableTableManager(_db, _db.people);
+  $$PersonVoiceprintsTableTableManager get personVoiceprints =>
+      $$PersonVoiceprintsTableTableManager(_db, _db.personVoiceprints);
   $$TranscriptSegmentsTableTableManager get transcriptSegments =>
       $$TranscriptSegmentsTableTableManager(_db, _db.transcriptSegments);
   $$SpeakerNamesTableTableManager get speakerNames =>

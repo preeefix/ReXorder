@@ -74,11 +74,54 @@ class TranscriptionRuns extends Table {
   ];
 }
 
+class RunSpeakerEmbeddings extends Table {
+  TextColumn get runId => text()();
+  IntColumn get speaker => integer()();
+  BlobColumn get embedding => blob()();
+  IntColumn get speechMs => integer()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {runId, speaker};
+
+  @override
+  List<String> get customConstraints => [
+    'FOREIGN KEY (run_id) REFERENCES transcription_runs (id) ON DELETE CASCADE',
+  ];
+}
+
+class People extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {id};
+}
+
+class PersonVoiceprints extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get personId => text()();
+  BlobColumn get embedding => blob()();
+  TextColumn get sourceRunId => text().nullable()();
+  IntColumn get sourceSpeaker => integer().nullable()();
+  IntColumn get speechMs => integer()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  List<String> get customConstraints => [
+    'FOREIGN KEY (person_id) REFERENCES people (id) ON DELETE CASCADE',
+    'FOREIGN KEY (source_run_id) REFERENCES transcription_runs (id) ON DELETE SET NULL',
+  ];
+}
+
 class SpeakerNames extends Table {
   TextColumn get recordingId => text()();
   TextColumn get runId => text()();
   IntColumn get speaker => integer()();
   TextColumn get name => text()();
+  TextColumn get personId => text().nullable()();
+  TextColumn get source => text().withDefault(const Constant('manual'))();
+  RealColumn get matchScore => real().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {runId, speaker};
@@ -87,6 +130,7 @@ class SpeakerNames extends Table {
   List<String> get customConstraints => [
     'FOREIGN KEY (recording_id) REFERENCES recordings (id) ON DELETE CASCADE',
     'FOREIGN KEY (run_id) REFERENCES transcription_runs (id) ON DELETE CASCADE',
+    'FOREIGN KEY (person_id) REFERENCES people (id) ON DELETE SET NULL',
   ];
 }
 
@@ -107,6 +151,9 @@ class Bookmarks extends Table {
   tables: [
     Recordings,
     TranscriptionRuns,
+    RunSpeakerEmbeddings,
+    People,
+    PersonVoiceprints,
     TranscriptSegments,
     SpeakerNames,
     Bookmarks,
@@ -120,7 +167,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -214,15 +261,45 @@ class AppDatabase extends _$AppDatabase {
         await migrator.alterTable(
           TableMigration(
             speakerNames,
-            newColumns: [speakerNames.runId],
+            newColumns: [
+              speakerNames.runId,
+              speakerNames.personId,
+              speakerNames.source,
+              speakerNames.matchScore,
+            ],
             columnTransformer: {
               speakerNames.runId: CustomExpression(
                 '(SELECT active_run_id FROM recordings '
                 'WHERE recordings.id = speaker_names.recording_id)',
               ),
+              speakerNames.personId: const CustomExpression('NULL'),
+              speakerNames.source: const CustomExpression("'manual'"),
+              speakerNames.matchScore: const CustomExpression('NULL'),
             },
           ),
         );
+      }
+      if (from < 6) {
+        await migrator.createTable(runSpeakerEmbeddings);
+        await migrator.createTable(people);
+        await migrator.createTable(personVoiceprints);
+        if (from >= 5) {
+          await migrator.alterTable(
+            TableMigration(
+              speakerNames,
+              newColumns: [
+                speakerNames.personId,
+                speakerNames.source,
+                speakerNames.matchScore,
+              ],
+              columnTransformer: {
+                speakerNames.personId: const CustomExpression('NULL'),
+                speakerNames.source: const CustomExpression("'manual'"),
+                speakerNames.matchScore: const CustomExpression('NULL'),
+              },
+            ),
+          );
+        }
       }
     },
     beforeOpen: (details) async {

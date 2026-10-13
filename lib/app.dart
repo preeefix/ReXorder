@@ -11,6 +11,7 @@ import 'screens/compare_screen.dart';
 import 'screens/detail_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/models_screen.dart';
+import 'screens/people_screen.dart';
 import 'screens/recorder_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/settings_screen.dart';
@@ -65,6 +66,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/benchmark',
         builder: (context, state) => const BenchmarkScreen(),
+      ),
+      GoRoute(
+        path: '/settings/people',
+        builder: (context, state) => const PeopleScreen(),
       ),
     ],
   );

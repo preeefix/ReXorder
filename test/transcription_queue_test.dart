@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -86,6 +87,80 @@ void main() {
       (await fixture.repository.getRecording(recording.id))!.asrModelId,
       'whisper-small',
     );
+  });
+
+  test(
+    'computes embeddings after a diarized run and skips other runs',
+    () async {
+      final fixture = await _Fixture.create();
+      addTearDown(fixture.dispose);
+      final diarizedRecording = await fixture.recording('diarized-embedding');
+      final diarizedProcessor = _FakeProcessor()
+        ..ranges = [const SpeechSampleRange(0, 80000)]
+        ..turns = [
+          const SpeakerTurn(startSample: 0, endSample: 80000, speaker: 0),
+        ]
+        ..embeddingResults = [
+          SpeakerEmbeddingResult(
+            speaker: 0,
+            embedding: Float32List.fromList([1, 0]),
+            speechMs: 5000,
+          ),
+        ];
+      final diarizedQueue = fixture.queue(
+        diarizedProcessor,
+        installedModels: _installedWithDiarization(),
+      );
+      await diarizedQueue.enqueue(
+        diarizedRecording.id,
+        modelId: 'whisper-small',
+        speakerCount: 2,
+      );
+      await diarizedQueue.processQueue();
+      final completedRun =
+          (await fixture.repository.watchRuns(diarizedRecording.id).first)
+              .single;
+      expect(diarizedProcessor.embeddingCalls, 1);
+      expect(
+        (await fixture.repository.listRunSpeakerEmbeddings(
+          completedRun.id,
+        )).single.speechMs,
+        5000,
+      );
+
+      final plainRecording = await fixture.recording('plain-no-embedding');
+      final plainProcessor = _FakeProcessor();
+      final plainQueue = fixture.queue(plainProcessor);
+      await plainQueue.enqueue(plainRecording.id, modelId: 'whisper-small');
+      await plainQueue.processQueue();
+      expect(plainProcessor.embeddingCalls, 0);
+    },
+  );
+
+  test('embedding failure does not fail completed transcription', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.recording('embedding-failure');
+    final processor = _FakeProcessor()
+      ..ranges = [const SpeechSampleRange(0, 80000)]
+      ..turns = [
+        const SpeakerTurn(startSample: 0, endSample: 80000, speaker: 0),
+      ]
+      ..failEmbedding = true;
+    final queue = fixture.queue(
+      processor,
+      installedModels: _installedWithDiarization(),
+    );
+    await queue.enqueue(
+      recording.id,
+      modelId: 'whisper-small',
+      speakerCount: 2,
+    );
+    await queue.processQueue();
+    final run = (await fixture.repository.watchRuns(recording.id).first).single;
+    expect(run.status, TranscriptionStatus.done);
+    expect(processor.embeddingCalls, 1);
+    expect(await fixture.repository.listRunSpeakerEmbeddings(run.id), isEmpty);
   });
 
   test('resume skips segments that already have text', () async {
@@ -769,6 +844,9 @@ class _FakeProcessor implements TranscriptionProcessor {
   int diarizeCalls = 0;
   List<int?> speakerCountHints = [];
   List<SpeakerTurn> turns = [];
+  bool failEmbedding = false;
+  int embeddingCalls = 0;
+  List<SpeakerEmbeddingResult> embeddingResults = [];
 
   @override
   Future<void> closeModel() async {}
@@ -804,6 +882,17 @@ class _FakeProcessor implements TranscriptionProcessor {
     if (failDiarization) throw StateError('synthetic diarization failure');
     onProgress(1, 1);
     return turns;
+  }
+
+  @override
+  Future<List<SpeakerEmbeddingResult>> embedSpeakers(
+    File wavFile,
+    Map<int, List<SpeakerTimeRange>> ranges,
+    String embeddingModelPath,
+  ) async {
+    embeddingCalls++;
+    if (failEmbedding) throw StateError('synthetic embedding failure');
+    return embeddingResults;
   }
 
   @override

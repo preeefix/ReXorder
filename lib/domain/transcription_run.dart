@@ -22,6 +22,7 @@ class TranscriptionRun {
     this.error,
     this.segmentCount = 0,
     this.doneCount = 0,
+    this.speakerCount = 0,
   });
 
   final String id;
@@ -37,4 +38,5 @@ class TranscriptionRun {
   final int processingMs;
   final int segmentCount;
   final int doneCount;
+  final int speakerCount;
 }

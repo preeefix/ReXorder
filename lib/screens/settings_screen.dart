@@ -62,6 +62,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             subtitle: const Text('Compare installed models'),
             onTap: () => context.push('/settings/benchmark'),
           ),
+          ListTile(
+            leading: const Icon(Icons.people_outline),
+            title: const Text('People'),
+            subtitle: const Text('Manage voiceprints and speaker identities'),
+            onTap: () => context.push('/settings/people'),
+          ),
           const Divider(),
           SwitchListTile(
             title: const Text('Transcribe after recording'),

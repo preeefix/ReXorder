@@ -13,6 +13,7 @@ import '../domain/transcript_segment.dart';
 import '../domain/transcription_run.dart';
 import '../models/model_catalog.dart';
 import '../models/model_import_client.dart';
+import '../voiceprint/voiceprint_types.dart';
 import 'power_channel.dart';
 import 'processing_service_channel.dart';
 import 'transcription_worker.dart';
@@ -300,6 +301,14 @@ class TranscriptionQueue {
         processingMsDelta: stopwatch.elapsedMilliseconds,
         diarized: diarized,
       );
+      if (diarized) {
+        try {
+          await computeRunEmbeddings(run.id);
+        } catch (error, stackTrace) {
+          debugPrint('Voiceprint extraction failed for run ${run.id}: $error');
+          debugPrintStack(stackTrace: stackTrace);
+        }
+      }
     } catch (error) {
       stopwatch.stop();
       try {
@@ -321,6 +330,47 @@ class TranscriptionQueue {
       stage.value = null;
       await _stopServiceBestEffort();
     }
+  }
+
+  Future<void> computeRunEmbeddings(String runId) async {
+    final run = await repository.getRun(runId);
+    if (run == null || !run.diarized) return;
+    if ((await repository.listRunSpeakerEmbeddings(runId)).isNotEmpty) return;
+    final grouped = <int, List<SpeakerTimeRange>>{};
+    for (final segment in await repository.listRunSegments(runId)) {
+      final speaker = segment.speaker;
+      if (speaker == null) continue;
+      grouped
+          .putIfAbsent(speaker, () => [])
+          .add(SpeakerTimeRange(segment.startMs, segment.endMs));
+    }
+    if (grouped.isEmpty) return;
+    final recording = await repository.getRecording(run.recordingId);
+    if (recording == null) return;
+    final embeddingModel = modelById('campplus-zh-en')!;
+    final processor = _processor ??= await TranscriptionWorker.spawn(
+      modelsDirectory: modelsDirectory,
+    );
+    final wavFile = File(p.join(recordingsDirectory.path, recording.fileName));
+    final embeddings = await processor.embedSpeakers(
+      wavFile,
+      grouped,
+      p.join(
+        modelsDirectory.path,
+        embeddingModel.id,
+        embeddingModel.files.single,
+      ),
+    );
+    await repository.saveRunSpeakerEmbeddings(runId, [
+      for (final embedding in embeddings)
+        SpeakerRunEmbedding(
+          runId: runId,
+          speaker: embedding.speaker,
+          embedding: embedding.embedding,
+          speechMs: embedding.speechMs,
+        ),
+    ]);
+    await repository.rematchAll();
   }
 
   TranscriptSegmentDraft _speakerDraft(int index, SpeakerPiece piece) =>

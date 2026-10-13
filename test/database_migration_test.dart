@@ -322,4 +322,100 @@ void main() {
       );
     },
   );
+
+  test('migrates v5 speaker names to voiceprint storage', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'rexorder-migration-v5-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/v5.sqlite');
+    final connection = sqlite.sqlite3.open(file.path);
+    connection.execute('''
+      CREATE TABLE recordings (
+        id TEXT NOT NULL PRIMARY KEY,
+        active_run_id TEXT
+      )
+    ''');
+    connection.execute('''
+      CREATE TABLE transcription_runs (
+        id TEXT NOT NULL PRIMARY KEY,
+        recording_id TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        asr_model_id TEXT,
+        language_hint TEXT NOT NULL,
+        speaker_count_hint INTEGER,
+        diarized INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL,
+        error TEXT,
+        processing_ms INTEGER NOT NULL DEFAULT 0
+      )
+    ''');
+    connection.execute('''
+      CREATE TABLE transcript_segments (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        recording_id TEXT NOT NULL,
+        run_id TEXT,
+        idx INTEGER NOT NULL,
+        start_ms INTEGER NOT NULL,
+        end_ms INTEGER NOT NULL,
+        text TEXT,
+        lang TEXT,
+        speaker INTEGER,
+        UNIQUE (run_id, idx)
+      )
+    ''');
+    connection.execute('''
+      CREATE TABLE speaker_names (
+        recording_id TEXT NOT NULL,
+        run_id TEXT NOT NULL,
+        speaker INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        PRIMARY KEY (run_id, speaker)
+      )
+    ''');
+    connection.execute('''
+      INSERT INTO recordings (id, active_run_id)
+      VALUES ('with-data', 'run-with-data'), ('without-segments', 'run-queued')
+    ''');
+    connection.execute('''
+      INSERT INTO transcription_runs
+        (id, recording_id, created_at, language_hint, status)
+      VALUES
+        ('run-with-data', 'with-data', 1760000000000, 'auto', 'done'),
+        ('run-queued', 'without-segments', 1760000001000, 'en', 'queued')
+    ''');
+    connection.execute('''
+      INSERT INTO transcript_segments
+        (recording_id, run_id, idx, start_ms, end_ms, text, speaker)
+      VALUES ('with-data', 'run-with-data', 0, 0, 1000, 'preserved', 1)
+    ''');
+    connection.execute('''
+      INSERT INTO speaker_names (recording_id, run_id, speaker, name)
+      VALUES ('with-data', 'run-with-data', 1, 'Alice')
+    ''');
+    connection.execute('PRAGMA user_version = 5');
+    connection.close();
+
+    final database = AppDatabase.open(file);
+    addTearDown(database.close);
+    final segment = await database
+        .select(database.transcriptSegments)
+        .getSingle();
+    final name = await database.select(database.speakerNames).getSingle();
+    final queuedRun = await (database.select(
+      database.transcriptionRuns,
+    )..where((run) => run.id.equals('run-queued'))).getSingle();
+
+    expect(segment.content, 'preserved');
+    expect(segment.runId, 'run-with-data');
+    expect(name.name, 'Alice');
+    expect(name.source, 'manual');
+    expect(name.personId, isNull);
+    expect(name.matchScore, isNull);
+    expect(queuedRun.status, TranscriptionStatus.queued);
+    expect(await database.select(database.runSpeakerEmbeddings).get(), isEmpty);
+    expect(await database.select(database.people).get(), isEmpty);
+    expect(await database.select(database.personVoiceprints).get(), isEmpty);
+  });
 }

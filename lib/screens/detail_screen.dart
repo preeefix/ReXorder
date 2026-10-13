@@ -14,14 +14,18 @@ import '../app.dart';
 import '../data/providers.dart';
 import '../domain/bookmark.dart';
 import '../domain/recording.dart';
+import '../domain/recording_repository.dart';
 import '../domain/transcript_segment.dart';
 import '../domain/transcription_run.dart';
+import '../domain/transcription_run_display.dart';
 import '../export/transcript_export.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../models/model_catalog.dart';
 import '../models/model_import_client.dart';
 import '../models/transcription_models_banner.dart';
 import '../processing/transcription_queue.dart';
+import '../voiceprint/voiceprint_types.dart';
+import '../voiceprint/matcher.dart';
 
 class DetailScreen extends ConsumerStatefulWidget {
   const DetailScreen({
@@ -41,6 +45,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
   final AudioPlayer _player = AudioPlayer();
   Recording? _recording;
   String? _error;
+  Stream<Map<int, SpeakerNameDetails>>? _speakerDetailsStream;
 
   @override
   void initState() {
@@ -353,6 +358,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                       children: [
                                         Expanded(
                                           child: DropdownButtonFormField<String>(
+                                            isExpanded: true,
                                             initialValue: selected.id,
                                             decoration: const InputDecoration(
                                               labelText: 'Transcription run',
@@ -412,11 +418,11 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                                             .deleteRun(run.id);
                                                       }
                                                     },
-                                                    child: Text(
-                                                      _runLabel(run),
-                                                      maxLines: 1,
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
+                                                    child: _RunSelectorItem(
+                                                      run: run,
+                                                      active:
+                                                          run.id ==
+                                                          current.activeRunId,
                                                     ),
                                                   ),
                                                 ),
@@ -478,17 +484,29 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                       ),
                                     );
                                   }
-                                  return _TranscriptList(
-                                    segments: segments,
-                                    speakerNames: speakerNames,
-                                    position: snapshot.data ?? Duration.zero,
-                                    onSeek: (position) =>
-                                        _player.seek(position),
-                                    onRenameSpeaker: (speaker, name) =>
-                                        _renameSpeaker(
-                                          recording.id,
-                                          speaker,
-                                          name,
+                                  return StreamBuilder<
+                                    Map<int, SpeakerNameDetails>
+                                  >(
+                                    stream: _speakerDetailsStream ??= repository
+                                        .watchSpeakerNameDetails(recording.id),
+                                    initialData: const {},
+                                    builder: (context, detailsSnapshot) =>
+                                        _TranscriptList(
+                                          segments: segments,
+                                          speakerNames: speakerNames,
+                                          speakerDetails:
+                                              detailsSnapshot.data ?? const {},
+                                          position:
+                                              snapshot.data ?? Duration.zero,
+                                          onSeek: (position) =>
+                                              _player.seek(position),
+                                          onRenameSpeaker: (speaker, name) =>
+                                              _manageSpeaker(
+                                                recording.id,
+                                                current.activeRunId,
+                                                speaker,
+                                                name,
+                                              ),
                                         ),
                                   );
                                 },
@@ -676,7 +694,138 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
         speakerCount: recording.speakerCountHint,
       );
 
-  Future<void> _renameSpeaker(
+  Future<void> _manageSpeaker(
+    String recordingId,
+    String? runId,
+    int speaker,
+    String? currentName,
+  ) async {
+    if (runId == null) return;
+    final repository = ref.read(recordingRepositoryProvider);
+    final details =
+        await repository.speakerNameDetails(recordingId, speaker) ??
+        SpeakerNameDetails(name: currentName ?? '', source: 'manual');
+    final embedding = await repository.getRunSpeakerEmbedding(runId, speaker);
+    if (!mounted) return;
+    final canEnroll =
+        embedding != null && embedding.speechMs >= voiceprintMinimumSpeechMs;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Rename'),
+              onTap: () => Navigator.pop(context, 'rename'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.person_add_alt_1),
+              title: const Text('This is…'),
+              subtitle: canEnroll
+                  ? null
+                  : const Text('Not enough speech for a voiceprint'),
+              enabled: canEnroll,
+              onTap: canEnroll
+                  ? () => Navigator.pop(context, 'identify')
+                  : null,
+            ),
+            if (details.source == 'auto' && details.personId != null) ...[
+              ListTile(
+                leading: const Icon(Icons.check_circle_outline),
+                title: Text('Confirm ${details.name}'),
+                onTap: () => Navigator.pop(context, 'confirm'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.person_off_outlined),
+                title: Text('Not ${details.name}'),
+                onTap: () => Navigator.pop(context, 'reject'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    if (action == 'rename') {
+      await _renameSpeakerName(recordingId, speaker, currentName);
+    } else if (action == 'reject') {
+      await repository.setSpeakerName(
+        recordingId: recordingId,
+        speaker: speaker,
+        name: '',
+      );
+    } else {
+      var personId = details.personId;
+      if (action == 'identify') {
+        personId = await _choosePerson(repository);
+      }
+      if (personId == null) return;
+      await repository.confirmSpeaker(
+        recordingId: recordingId,
+        runId: runId,
+        speaker: speaker,
+        personId: personId,
+      );
+    }
+  }
+
+  Future<String?> _choosePerson(RecordingRepository repository) async {
+    const newPerson = '__new_person__';
+    final people = await repository.listPeople();
+    if (!mounted) return null;
+    final selection = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            for (final person in people)
+              ListTile(
+                leading: const Icon(Icons.person_outline),
+                title: Text(person.name),
+                onTap: () => Navigator.pop(context, person.id),
+              ),
+            ListTile(
+              leading: const Icon(Icons.person_add_alt_1),
+              title: const Text('New person…'),
+              onTap: () => Navigator.pop(context, newPerson),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || selection == null) return null;
+    if (selection != newPerson) return selection;
+    final controller = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('New person'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Name'),
+          textCapitalization: TextCapitalization.words,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text.trim()),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (name == null || name.trim().isEmpty) return null;
+    return repository.createPerson(name);
+  }
+
+  Future<void> _renameSpeakerName(
     String recordingId,
     int speaker,
     String? currentName,
@@ -988,6 +1137,7 @@ class _TranscriptList extends StatefulWidget {
   const _TranscriptList({
     required this.segments,
     required this.speakerNames,
+    required this.speakerDetails,
     required this.position,
     required this.onSeek,
     required this.onRenameSpeaker,
@@ -995,6 +1145,7 @@ class _TranscriptList extends StatefulWidget {
 
   final List<TranscriptSegment> segments;
   final Map<int, String> speakerNames;
+  final Map<int, SpeakerNameDetails> speakerDetails;
   final Duration position;
   final ValueChanged<Duration> onSeek;
   final void Function(int speaker, String? currentName) onRenameSpeaker;
@@ -1074,6 +1225,9 @@ class _TranscriptListState extends State<_TranscriptList> {
         final speakerName = speaker == null
             ? null
             : widget.speakerNames[speaker];
+        final speakerDetails = speaker == null
+            ? null
+            : widget.speakerDetails[speaker];
         return Column(
           key: _itemKeys[index],
           children: [
@@ -1084,7 +1238,11 @@ class _TranscriptListState extends State<_TranscriptList> {
                   padding: const EdgeInsets.only(left: 8, top: 4),
                   child: _SpeakerChip(
                     speaker: speaker,
-                    name: speakerName ?? 'Speaker ${speaker + 1}',
+                    name: speakerName?.isNotEmpty == true
+                        ? speakerName!
+                        : 'Speaker ${speaker + 1}',
+                    source: speakerDetails?.source,
+                    matchScore: speakerDetails?.matchScore,
                     onTap: () => widget.onRenameSpeaker(speaker, speakerName),
                   ),
                 ),
@@ -1128,11 +1286,15 @@ class _SpeakerChip extends StatelessWidget {
   const _SpeakerChip({
     required this.speaker,
     required this.name,
+    required this.source,
+    required this.matchScore,
     required this.onTap,
   });
 
   final int speaker;
   final String name;
+  final String? source;
+  final double? matchScore;
   final VoidCallback onTap;
 
   @override
@@ -1148,12 +1310,20 @@ class _SpeakerChip extends StatelessWidget {
     final foreground = background.computeLuminance() > 0.4
         ? Colors.black
         : Colors.white;
-    return ActionChip(
+    final chip = ActionChip(
+      avatar: source == 'auto'
+          ? Icon(Icons.auto_awesome, size: 16, color: foreground)
+          : null,
       label: Text(name),
       backgroundColor: background,
       side: BorderSide(color: base),
       labelStyle: TextStyle(color: foreground),
       onPressed: onTap,
+    );
+    if (source != 'auto' || matchScore == null) return chip;
+    return Tooltip(
+      message: 'Auto match · ${(matchScore! * 100).round()}%',
+      child: chip,
     );
   }
 }
@@ -1167,18 +1337,79 @@ String _formatSegmentTime(int milliseconds) {
 String _format(Duration duration) =>
     '${duration.inMinutes.toString().padLeft(2, '0')}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
 
-String _runLabel(TranscriptionRun run) {
-  final model = modelById(run.asrModelId ?? '')?.displayName ?? 'Unknown model';
-  final speakerCount = run.speakerCountHint == null
-      ? 'Auto'
-      : '${run.speakerCountHint} speakers';
-  final date = DateFormat('MM/dd HH:mm').format(run.createdAt.toLocal());
-  final elapsed = _format(Duration(milliseconds: run.processingMs));
-  final status = switch (run.status) {
-    TranscriptionStatus.queued => ' · Queued',
-    TranscriptionStatus.running => ' · Running',
-    TranscriptionStatus.failed => ' · Failed',
-    _ => '',
-  };
-  return '$model · ${run.languageHint.name} · $speakerCount · $date · $elapsed$status';
+class _RunSelectorItem extends StatelessWidget {
+  const _RunSelectorItem({required this.run, required this.active});
+
+  final TranscriptionRun run;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final model =
+        modelById(run.asrModelId ?? '')?.displayName ?? 'Unknown model';
+    final status = switch (run.status) {
+      TranscriptionStatus.queued => 'Queued',
+      TranscriptionStatus.running => 'Running',
+      TranscriptionStatus.failed => 'Failed',
+      _ => null,
+    };
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 360),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  model,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+              if (status != null)
+                Tooltip(
+                  message: status == 'Failed' ? run.error ?? 'Failed' : status,
+                  child: _RunBadge(status),
+                ),
+              if (active) const _RunBadge('Active'),
+            ],
+          ),
+          Text(
+            runDetailsLabel(run),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RunBadge extends StatelessWidget {
+  const _RunBadge(this.label);
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(left: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: colors.secondaryContainer,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        label,
+        style: Theme.of(
+          context,
+        ).textTheme.labelSmall?.copyWith(color: colors.onSecondaryContainer),
+      ),
+    );
+  }
 }
