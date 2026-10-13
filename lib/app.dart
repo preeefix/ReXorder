@@ -11,6 +11,7 @@ import 'screens/detail_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/models_screen.dart';
 import 'screens/recorder_screen.dart';
+import 'screens/search_screen.dart';
 import 'screens/settings_screen.dart';
 import 'theme/theme_mode_provider.dart';
 
@@ -35,8 +36,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/recording/:id',
-        builder: (context, state) =>
-            DetailScreen(recordingId: state.pathParameters['id']!),
+        builder: (context, state) => DetailScreen(
+          recordingId: state.pathParameters['id']!,
+          initialPositionMs: int.tryParse(state.uri.queryParameters['t'] ?? ''),
+        ),
+      ),
+      GoRoute(
+        path: '/search',
+        builder: (context, state) => const SearchScreen(),
       ),
       GoRoute(
         path: '/settings',

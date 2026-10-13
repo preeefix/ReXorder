@@ -111,4 +111,91 @@ void main() {
     expect(segment.speaker, 2);
     expect(await database.select(database.speakerNames).get(), isEmpty);
   });
+
+  test(
+    'migrates v3 rows to v4 bookmarks without losing existing data',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'rexorder-migration-v3-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final file = File('${directory.path}/v3.sqlite');
+      final connection = sqlite.sqlite3.open(file.path);
+      connection.execute('''
+      CREATE TABLE recordings (
+        id TEXT NOT NULL PRIMARY KEY,
+        title TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        file_name TEXT NOT NULL,
+        sample_rate INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        transcription_status TEXT NOT NULL DEFAULT 'none',
+        language_hint TEXT NOT NULL DEFAULT 'auto',
+        asr_model_id TEXT,
+        transcription_error TEXT,
+        speaker_count_hint INTEGER
+      )
+    ''');
+      connection.execute('''
+      CREATE TABLE transcript_segments (
+        id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+        recording_id TEXT NOT NULL,
+        idx INTEGER NOT NULL,
+        start_ms INTEGER NOT NULL,
+        end_ms INTEGER NOT NULL,
+        text TEXT,
+        lang TEXT,
+        speaker INTEGER,
+        FOREIGN KEY (recording_id) REFERENCES recordings (id)
+          ON DELETE CASCADE,
+        UNIQUE (recording_id, idx)
+      )
+    ''');
+      connection.execute('''
+      CREATE TABLE speaker_names (
+        recording_id TEXT NOT NULL,
+        speaker INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        PRIMARY KEY (recording_id, speaker),
+        FOREIGN KEY (recording_id) REFERENCES recordings (id)
+          ON DELETE CASCADE
+      )
+    ''');
+      connection.execute('''
+      INSERT INTO recordings
+        (id, title, created_at, duration_ms, file_name, sample_rate, status,
+         speaker_count_hint)
+      VALUES ('legacy-v3', 'Legacy v3', 1767261600000, 1500, 'legacy.wav',
+              16000, 'ready', 3)
+    ''');
+      connection.execute('''
+      INSERT INTO transcript_segments
+        (recording_id, idx, start_ms, end_ms, text, speaker)
+      VALUES ('legacy-v3', 0, 0, 800, 'preserved transcript', 2)
+    ''');
+      connection.execute('''
+      INSERT INTO speaker_names (recording_id, speaker, name)
+      VALUES ('legacy-v3', 2, 'Alice')
+    ''');
+      connection.execute('PRAGMA user_version = 3');
+      connection.close();
+
+      final database = AppDatabase.open(file);
+      addTearDown(database.close);
+      final recording = await database.select(database.recordings).getSingle();
+      final segment = await database
+          .select(database.transcriptSegments)
+          .getSingle();
+      final speakerName = await database
+          .select(database.speakerNames)
+          .getSingle();
+
+      expect(recording.title, 'Legacy v3');
+      expect(recording.speakerCountHint, 3);
+      expect(segment.content, 'preserved transcript');
+      expect(speakerName.name, 'Alice');
+      expect(await database.select(database.bookmarks).get(), isEmpty);
+    },
+  );
 }

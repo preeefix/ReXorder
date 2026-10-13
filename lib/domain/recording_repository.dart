@@ -6,7 +6,9 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import '../data/database.dart' as db;
+import 'bookmark.dart';
 import 'recording.dart';
+import 'search_hit.dart';
 import 'transcript_segment.dart';
 
 class RecordingRepository {
@@ -49,6 +51,66 @@ class RecordingRepository {
       _database.recordings,
     )..where((recording) => recording.id.equals(id))).getSingleOrNull();
     return row == null ? null : _toDomain(row);
+  }
+
+  Future<List<SearchHit>> search(String query, {int limit = 200}) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty || limit <= 0) return [];
+    final escaped = trimmed
+        .replaceAll(r'\', r'\\')
+        .replaceAll('%', r'\%')
+        .replaceAll('_', r'\_');
+    final pattern = '%$escaped%';
+    final rows = await _database
+        .customSelect(
+          r'''
+          SELECT r.id AS recording_id,
+                 r.title AS recording_title,
+                 r.created_at AS created_at,
+                 s.start_ms AS segment_start_ms,
+                 s.text AS hit_text
+          FROM recordings r
+          JOIN transcript_segments s ON s.recording_id = r.id
+          WHERE s.text LIKE ? ESCAPE '\'
+          UNION ALL
+          SELECT r.id AS recording_id,
+                 r.title AS recording_title,
+                 r.created_at AS created_at,
+                 NULL AS segment_start_ms,
+                 NULL AS hit_text
+          FROM recordings r
+          WHERE r.title LIKE ? ESCAPE '\'
+            AND NOT EXISTS (
+              SELECT 1
+              FROM transcript_segments s
+              WHERE s.recording_id = r.id
+                AND s.text LIKE ? ESCAPE '\'
+            )
+          ORDER BY created_at DESC, segment_start_ms ASC
+          LIMIT ?
+          ''',
+          variables: [
+            drift.Variable.withString(pattern),
+            drift.Variable.withString(pattern),
+            drift.Variable.withString(pattern),
+            drift.Variable.withInt(limit),
+          ],
+          readsFrom: {_database.recordings, _database.transcriptSegments},
+        )
+        .get();
+    return rows
+        .map(
+          (row) => SearchHit(
+            recordingId: row.read<String>('recording_id'),
+            recordingTitle: row.read<String>('recording_title'),
+            createdAt: DateTime.fromMillisecondsSinceEpoch(
+              row.read<int>('created_at'),
+            ),
+            segmentStartMs: row.readNullable<int>('segment_start_ms'),
+            text: row.readNullable<String>('hit_text'),
+          ),
+        )
+        .toList();
   }
 
   Future<Recording> createRecording({String? id, String? title}) async {
@@ -261,6 +323,67 @@ class RecordingRepository {
       _database.speakerNames,
     )..where((row) => row.recordingId.equals(recordingId))).go();
   }
+
+  Future<Bookmark> addBookmark(
+    String recordingId,
+    int positionMs, {
+    String? label,
+  }) async {
+    final normalized = label?.trim();
+    final id = await _database
+        .into(_database.bookmarks)
+        .insert(
+          db.BookmarksCompanion.insert(
+            recordingId: recordingId,
+            positionMs: positionMs,
+            label: drift.Value(
+              normalized == null || normalized.isEmpty ? null : normalized,
+            ),
+            createdAt: _now(),
+          ),
+        );
+    final row = await (_database.select(
+      _database.bookmarks,
+    )..where((bookmark) => bookmark.id.equals(id))).getSingle();
+    return _toBookmark(row);
+  }
+
+  Stream<List<Bookmark>> watchBookmarks(String recordingId) =>
+      (_database.select(_database.bookmarks)
+            ..where((row) => row.recordingId.equals(recordingId))
+            ..orderBy([
+              (row) => drift.OrderingTerm.asc(row.positionMs),
+              (row) => drift.OrderingTerm.asc(row.id),
+            ]))
+          .watch()
+          .map((rows) => rows.map(_toBookmark).toList());
+
+  Future<void> renameBookmark(int id, String? label) async {
+    final normalized = label?.trim();
+    await (_database.update(
+      _database.bookmarks,
+    )..where((row) => row.id.equals(id))).write(
+      db.BookmarksCompanion(
+        label: drift.Value(
+          normalized == null || normalized.isEmpty ? null : normalized,
+        ),
+      ),
+    );
+  }
+
+  Future<void> deleteBookmark(int id) async {
+    await (_database.delete(
+      _database.bookmarks,
+    )..where((row) => row.id.equals(id))).go();
+  }
+
+  Bookmark _toBookmark(db.Bookmark row) => Bookmark(
+    id: row.id,
+    recordingId: row.recordingId,
+    positionMs: row.positionMs,
+    label: row.label,
+    createdAt: row.createdAt,
+  );
 
   Future<List<TranscriptSegment>> listTranscriptSegments(
     String recordingId,

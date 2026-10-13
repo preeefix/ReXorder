@@ -62,7 +62,22 @@ class SpeakerNames extends Table {
   ];
 }
 
-@DriftDatabase(tables: [Recordings, TranscriptSegments, SpeakerNames])
+class Bookmarks extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get recordingId => text()();
+  IntColumn get positionMs => integer()();
+  TextColumn get label => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  List<String> get customConstraints => [
+    'FOREIGN KEY (recording_id) REFERENCES recordings (id) ON DELETE CASCADE',
+  ];
+}
+
+@DriftDatabase(
+  tables: [Recordings, TranscriptSegments, SpeakerNames, Bookmarks],
+)
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
@@ -71,7 +86,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -87,6 +102,9 @@ class AppDatabase extends _$AppDatabase {
       if (from < 3) {
         await migrator.addColumn(recordings, recordings.speakerCountHint);
         await migrator.createTable(speakerNames);
+      }
+      if (from < 4) {
+        await migrator.createTable(bookmarks);
       }
     },
     beforeOpen: (details) async {
