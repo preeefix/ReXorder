@@ -13,6 +13,70 @@ import 'package:rexorder/processing/transcription_queue.dart';
 import 'package:rexorder/processing/transcription_worker.dart';
 
 void main() {
+  test('preferred installed ASR follows the recommendation order', () {
+    expect(defaultAsrPreference, [
+      'sense-voice',
+      'whisper-turbo',
+      'whisper-small',
+    ]);
+    expect(
+      preferredInstalledAsr(['whisper-small', 'whisper-turbo'])?.id,
+      'whisper-turbo',
+    );
+    expect(
+      preferredInstalledAsr(['whisper-small', 'sense-voice'])?.id,
+      'sense-voice',
+    );
+    expect(preferredInstalledAsr(['silero-vad']), isNull);
+  });
+
+  test('queue defaults to SenseVoice when no model was requested', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.recording('sensevoice-default');
+    await fixture.repository.updateTranscription(
+      id: recording.id,
+      status: TranscriptionStatus.queued,
+    );
+    final processor = _FakeProcessor();
+    final queue = fixture.queue(
+      processor,
+      installedModels: _installedWhisperAndSenseVoice(),
+    );
+
+    await queue.processQueue();
+
+    expect(processor.openedModelIds, ['sense-voice']);
+    expect(
+      (await fixture.repository.getRecording(recording.id))!.asrModelId,
+      'sense-voice',
+    );
+  });
+
+  test('queue honors an installed explicitly requested model', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.recording('requested-whisper');
+    await fixture.repository.updateTranscription(
+      id: recording.id,
+      status: TranscriptionStatus.queued,
+      modelId: 'whisper-small',
+    );
+    final processor = _FakeProcessor();
+    final queue = fixture.queue(
+      processor,
+      installedModels: _installedWhisperAndSenseVoice(),
+    );
+
+    await queue.processQueue();
+
+    expect(processor.openedModelIds, ['whisper-small']);
+    expect(
+      (await fixture.repository.getRecording(recording.id))!.asrModelId,
+      'whisper-small',
+    );
+  });
+
   test('resume skips segments that already have text', () async {
     final fixture = await _Fixture.create();
     addTearDown(fixture.dispose);
@@ -216,11 +280,19 @@ class _Fixture {
     Future<void> Function(String)? startService,
     Future<void> Function(String, int, int)? updateService,
     Future<void> Function()? stopService,
+    Map<String, List<String>>? installedModels,
   }) => TranscriptionQueue(
     repository: repository,
     recordingsDirectory: Directory('${directory.path}/recordings'),
     modelsDirectory: modelsDirectory,
-    modelClient: _FakeModelClient(),
+    modelClient: _FakeModelClient(
+      installed:
+          installedModels ??
+          {
+            'silero-vad': ['silero_vad.onnx'],
+            'whisper-small': modelById('whisper-small')!.files,
+          },
+    ),
     processor: processor,
     startService: startService ?? (_) async {},
     updateService: updateService ?? (_, _, _) async {},
@@ -234,6 +306,10 @@ class _Fixture {
 }
 
 class _FakeModelClient implements ModelImportClient {
+  _FakeModelClient({required this.installed});
+
+  final Map<String, List<String>> installed;
+
   @override
   Stream<ModelImportProgress> get progress => const Stream.empty();
 
@@ -244,10 +320,7 @@ class _FakeModelClient implements ModelImportClient {
   Future<String> importModel(String uri, CatalogModel model) async => '';
 
   @override
-  Future<Map<String, List<String>>> listInstalled() async => {
-    'silero-vad': ['silero_vad.onnx'],
-    'whisper-small': modelCatalog[1].files,
-  };
+  Future<Map<String, List<String>>> listInstalled() async => installed;
 
   @override
   Future<String?> pickDocument() async => null;
@@ -256,6 +329,7 @@ class _FakeModelClient implements ModelImportClient {
 class _FakeProcessor implements TranscriptionProcessor {
   final failedPaths = <String>{};
   final transcribedPaths = <String>[];
+  final openedModelIds = <String>[];
   List<SpeechSampleRange> ranges = [const SpeechSampleRange(0, 160)];
   int segmentCalls = 0;
   bool failSegmentation = false;
@@ -267,7 +341,9 @@ class _FakeProcessor implements TranscriptionProcessor {
   Future<void> openModel({
     required CatalogModel model,
     required String language,
-  }) async {}
+  }) async {
+    openedModelIds.add(model.id);
+  }
 
   @override
   Future<List<SpeechSampleRange>> segment(
@@ -292,3 +368,9 @@ class _FakeProcessor implements TranscriptionProcessor {
     return const AsrTranscript(text: 'recognized', language: 'ja');
   }
 }
+
+Map<String, List<String>> _installedWhisperAndSenseVoice() => {
+  'silero-vad': ['silero_vad.onnx'],
+  'whisper-small': modelById('whisper-small')!.files,
+  'sense-voice': modelById('sense-voice')!.files,
+};

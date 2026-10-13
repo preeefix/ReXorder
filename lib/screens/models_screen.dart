@@ -84,9 +84,26 @@ class _ModelCard extends ConsumerWidget {
             Row(
               children: [
                 Expanded(
-                  child: Text(
-                    model.displayName,
-                    style: Theme.of(context).textTheme.titleMedium,
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          model.displayName,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                      ),
+                      if (model.id == 'sense-voice') ...[
+                        const SizedBox(width: 8),
+                        const Chip(
+                          label: Text('Recommended'),
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          padding: EdgeInsets.symmetric(horizontal: 4),
+                          labelPadding: EdgeInsets.symmetric(horizontal: 4),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
                 Text(installed ? 'Installed' : 'Not installed'),

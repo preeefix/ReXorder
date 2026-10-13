@@ -17,3 +17,5 @@ ReXorder never downloads models or audio and has no `INTERNET` permission. Downl
 4. Wait for extraction to finish. Imported files stay in the app's private storage and are not added to the APK.
 
 The SenseVoice archive also provides `test_wavs/ja.wav` and `test_wavs/en.wav`; these are imported as local benchmark samples. Developer-only `tool/fetch_models.sh` downloads the pinned release files into the ignored `dev-models/` directory for emulator testing.
+
+SenseVoice is the default: it ran at about 35× real-time speed on Xperia 1 VII with the best Japanese accuracy; Whisper models remain available for re-transcription.

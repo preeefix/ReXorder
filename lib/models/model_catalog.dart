@@ -71,6 +71,16 @@ const modelCatalog = <CatalogModel>[
   ),
 ];
 
+const defaultAsrPreference = ['sense-voice', 'whisper-turbo', 'whisper-small'];
+
+CatalogModel? preferredInstalledAsr(Iterable<String> installedIds) {
+  final installed = installedIds.toSet();
+  for (final id in defaultAsrPreference) {
+    if (installed.contains(id)) return modelById(id);
+  }
+  return null;
+}
+
 CatalogModel? modelById(String id) {
   for (final model in modelCatalog) {
     if (model.id == id) return model;

@@ -267,7 +267,8 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     var selectedModelId =
         models.any((model) => model.id == recording.asrModelId)
         ? recording.asrModelId!
-        : models.first.id;
+        : preferredInstalledAsr(models.map((model) => model.id))?.id ??
+              models.first.id;
     var selectedLanguage = recording.languageHint;
     final selection = await showModalBottomSheet<(String, LanguageHint)>(
       context: context,

@@ -82,14 +82,17 @@ class TranscriptionQueue {
                 ),
           )
           .toList();
-      if (!vad.files.every(vadFiles.contains) || installedAsr.isEmpty) return;
+      final preferredAsr = preferredInstalledAsr(
+        installedAsr.map((model) => model.id),
+      );
+      if (!vad.files.every(vadFiles.contains) || preferredAsr == null) return;
       final recording = queued.first;
       final requestedModel = modelById(recording.asrModelId ?? '');
       final model =
           requestedModel != null &&
               installedAsr.any((item) => item.id == requestedModel.id)
           ? requestedModel
-          : installedAsr.first;
+          : preferredAsr;
       await _processRecording(recording, model);
     }
   }
