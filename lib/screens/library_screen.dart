@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../app.dart';
 import '../domain/recording.dart';
 import '../l10n/generated/app_localizations.dart';
+import '../models/transcription_models_banner.dart';
 
 class LibraryScreen extends ConsumerWidget {
   const LibraryScreen({super.key});
@@ -15,19 +16,37 @@ class LibraryScreen extends ConsumerWidget {
     final l10n = AppLocalizations.of(context)!;
     final recordings = ref.watch(recordingsProvider);
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.libraryTitle)),
-      body: recordings.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (error, stackTrace) => Center(child: Text(error.toString())),
-        data: (items) => items.isEmpty
-            ? _EmptyLibrary(l10n: l10n)
-            : ListView.separated(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-                itemCount: items.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 8),
-                itemBuilder: (context, index) =>
-                    _RecordingTile(recording: items[index]),
-              ),
+      appBar: AppBar(
+        title: Text(l10n.libraryTitle),
+        actions: [
+          IconButton(
+            tooltip: 'Settings',
+            onPressed: () => context.push('/settings'),
+            icon: const Icon(Icons.settings_outlined),
+          ),
+        ],
+      ),
+      body: Column(
+        children: [
+          const TranscriptionModelsBanner(),
+          Expanded(
+            child: recordings.when(
+              loading: () => const Center(child: CircularProgressIndicator()),
+              error: (error, stackTrace) =>
+                  Center(child: Text(error.toString())),
+              data: (items) => items.isEmpty
+                  ? _EmptyLibrary(l10n: l10n)
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+                      itemCount: items.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: 8),
+                      itemBuilder: (context, index) =>
+                          _RecordingTile(recording: items[index]),
+                    ),
+            ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/record'),
@@ -97,9 +116,37 @@ class _RecordingTile extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         subtitle: Text('$date  ·  ${_formatDuration(elapsed)}'),
-        trailing: const Icon(Icons.chevron_right),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _TranscriptionStatus(recording.transcriptionStatus),
+            const Icon(Icons.chevron_right),
+          ],
+        ),
         onTap: () => context.push('/recording/${recording.id}'),
       ),
+    );
+  }
+}
+
+class _TranscriptionStatus extends StatelessWidget {
+  const _TranscriptionStatus(this.status);
+
+  final TranscriptionStatus status;
+
+  @override
+  Widget build(BuildContext context) {
+    final (icon, label) = switch (status) {
+      TranscriptionStatus.none => (null, null),
+      TranscriptionStatus.queued => (Icons.schedule, 'Queued'),
+      TranscriptionStatus.running => (Icons.sync, 'Transcribing'),
+      TranscriptionStatus.done => (Icons.check_circle_outline, 'Transcribed'),
+      TranscriptionStatus.failed => (Icons.error_outline, 'Failed'),
+    };
+    if (icon == null) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: Tooltip(message: label!, child: Icon(icon, size: 18)),
     );
   }
 }

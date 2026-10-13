@@ -4,7 +4,7 @@ Record → transcribe (English/Japanese) → label speakers, entirely on the dev
 
 ## Decisions (agreed)
 - **Framework: Flutter** (Dart). Native Kotlin is kept to a small foreground-service shim.
-- **Completely offline**: works out of the box. All models are bundled and nothing is ever downloaded. The `INTERNET` permission is explicitly removed from the merged release manifest, and CI checks this.
+- **Completely offline at runtime**: the app has no `INTERNET` permission and never downloads audio or models. Users download official model files outside the app and import them from local storage.
 - **Distribution**: sideloaded APK first. Play Store requirements are sketched below.
 - **Languages**: English and Japanese, auto-detected for each chunk.
 - **Transcription runs after recording stops.** No live captions in v1.
@@ -15,11 +15,11 @@ Record → transcribe (English/Japanese) → label speakers, entirely on the dev
 |---|---|
 | App | Flutter, Riverpod, go_router, freezed, drift (SQLite) |
 | Capture | `record` package streaming PCM16 at 16 kHz mono. The app writes the chunks to a `.pcm` file as they arrive, then wraps it in a WAV header on stop. If the app is killed mid-recording, the orphaned `.pcm` files are recovered on the next launch. |
-| Background | Small Kotlin foreground service (`foregroundServiceType="microphone"`) started over a MethodChannel while recording. A second service of type `dataSync` (or `mediaProcessing` on API 35+) runs transcription. |
+| Background | Kotlin foreground services for recording (`microphone`) and transcription (`dataSync` or `mediaProcessing` on API 35+), controlled over MethodChannels. |
 | Playback / share | `just_audio`, `share_plus` |
 | ML runtime | `sherpa_onnx` Flutter package (Dart FFI over the prebuilt sherpa-onnx native libraries), run in a background isolate |
-| VAD | silero-vad, which splits audio into chunks of 30 s or less |
-| ASR | Whisper multilingual int8. It detects one language per chunk, and the result includes `lang`. Compared against SenseVoice (zh/en/ja/ko/yue) on mixed EN/JA speech before choosing a default. |
+| VAD | Imported Silero VAD splits audio into segments no longer than 20 s. |
+| ASR | Imported Whisper multilingual int8 or SenseVoice; installed models are benchmarked on-device. |
 | Diarization | `OfflineSpeakerDiarization`: pyannote segmentation-3.0 + speaker-embedding model + clustering, with an optional speaker-count hint |
 
 ## Processing pipeline
@@ -31,21 +31,20 @@ Record → transcribe (English/Japanese) → label speakers, entirely on the dev
 
 Language note: a recording that switches EN↔JA between sentences or turns transcribes correctly. Code-switching within a single sentence does not; the chunk gets one language.
 
-## Models: bundled, no downloads
-- Models ship as Flutter assets. The sherpa-onnx Dart API needs real file paths, so the models are copied once to app-support storage on first launch. This uses extra disk space but no network.
-- Base set: silero-vad, Whisper multilingual int8 (base or small, picked from benchmarks), segmentation, embedding.
-- APK target is arm64-v8a only for release, with x86_64 also built for emulator/dev.
-- Optional later: "import model file" to swap in larger models, still without network access.
+## Models: local imports, no bundled assets
+- APKs contain no ONNX model files. Users download pinned models from the official sherpa-onnx release page and import them through Android's system document picker.
+- A Kotlin importer streams, hashes, and selectively extracts the files into app-private storage. Imported Whisper, SenseVoice, and Silero VAD models are used only on-device.
+- CI checks APK permissions and asserts that no `.onnx` model files are packaged.
 
 ## Phases
 1. **Scaffold + recorder core**: Flutter app, CI (analyze, test, release APK, no-INTERNET check), foreground recording service, crash-safe PCM→WAV capture, drift library, playback, rename/delete/share.
-2. **Benchmark + offline transcription**: bundle the models, run a benchmark screen on the emulator and on Q.'s phone, then build the VAD → Whisper pipeline (background isolate, resumable job), a transcript view synced to playback, and manual language override.
+2. **Benchmark + offline transcription**: import models locally, benchmark them on the emulator and on Q.'s phone, then build the VAD → ASR pipeline (background isolate, resumable job), a transcript view synced to playback, and manual language override.
 3. **Speaker detection**: diarization, merge, speaker colors and renaming, speaker-count hint, re-run.
-4. **Polish**: exports (TXT/SRT/VTT/JSON), full-text search, bookmarks, a "transcribe only while charging" option, and the model import screen.
+4. **Polish**: exports (TXT/SRT/VTT/JSON), full-text search, bookmarks, and a "transcribe only while charging" option.
 
 ## Play Store: technical requirements (not planned yet)
 Items to re-check against current Play policy when the time comes:
-- **Format**: AAB, not APK. The base module has a compressed download-size cap, so bundled models must move into **Play Asset Delivery install-time asset packs**. These are still installed with the app, so the "no downloads" rule holds, and the app reads them through the Android AssetManager (a small Kotlin bridge copies them to files on first run). Pack size limits need checking against current docs.
+- **Format**: AAB, not APK. Imported model files remain in app-private storage and are not part of the app bundle.
 - **Target SDK**: must meet Play's current target-API-level requirement, which rises yearly.
 - **16 KB page size**: native `.so` files (sherpa-onnx, onnxruntime) must be 16 KB-aligned for Android 15+ devices. Check the prebuilt libraries' alignment.
 - **Foreground service declarations**: Play Console requires a declaration and justification (plus a video) for `microphone` and `dataSync`/`mediaProcessing` FGS types.

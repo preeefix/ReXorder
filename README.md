@@ -1,6 +1,8 @@
 # ReXorder
 
-An offline-first voice recorder for Android. Phase 1 provides crash-safe PCM capture, a recordings library, playback, rename, delete, and sharing.
+An offline voice recorder for Android with on-device English and Japanese transcription. ReXorder never connects to the network: download official model files separately and import them locally. See [model download and import instructions](docs/MODELS.md).
+
+The app includes crash-safe PCM capture, resumable transcription, playback, transcript navigation, and model benchmarking.
 
 See [the full project plan](docs/PLAN.md) for the roadmap.
 

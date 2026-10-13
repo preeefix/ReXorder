@@ -6,9 +6,12 @@ import 'package:go_router/go_router.dart';
 import 'data/providers.dart';
 import 'domain/recording_repository.dart';
 import 'l10n/generated/app_localizations.dart';
+import 'screens/benchmark_screen.dart';
 import 'screens/detail_screen.dart';
 import 'screens/library_screen.dart';
+import 'screens/models_screen.dart';
 import 'screens/recorder_screen.dart';
+import 'screens/settings_screen.dart';
 
 final recordingRepositoryProvider = Provider<RecordingRepository>(
   (ref) => RecordingRepository(
@@ -33,6 +36,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/recording/:id',
         builder: (context, state) =>
             DetailScreen(recordingId: state.pathParameters['id']!),
+      ),
+      GoRoute(
+        path: '/settings',
+        builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/settings/models',
+        builder: (context, state) => const ModelsScreen(),
+      ),
+      GoRoute(
+        path: '/settings/benchmark',
+        builder: (context, state) => const BenchmarkScreen(),
       ),
     ],
   );
