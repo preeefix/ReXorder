@@ -15,6 +15,7 @@ import '../data/providers.dart';
 import '../domain/bookmark.dart';
 import '../domain/recording.dart';
 import '../domain/transcript_segment.dart';
+import '../domain/transcription_run.dart';
 import '../export/transcript_export.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../models/model_catalog.dart';
@@ -332,6 +333,134 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                 ),
                               ),
                             ],
+                            StreamBuilder<List<TranscriptionRun>>(
+                              stream: repository.watchRuns(recording.id),
+                              builder: (context, runsSnapshot) {
+                                final runs =
+                                    runsSnapshot.data ??
+                                    const <TranscriptionRun>[];
+                                if (runs.length < 2) {
+                                  return const SizedBox.shrink();
+                                }
+                                final selected = runs.firstWhere(
+                                  (run) => run.id == current.activeRunId,
+                                  orElse: () => runs.first,
+                                );
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: DropdownButtonFormField<String>(
+                                            initialValue: selected.id,
+                                            decoration: const InputDecoration(
+                                              labelText: 'Transcription run',
+                                            ),
+                                            items: [
+                                              for (final run in runs)
+                                                DropdownMenuItem(
+                                                  value: run.id,
+                                                  child: GestureDetector(
+                                                    onLongPress: () async {
+                                                      if (run.id ==
+                                                              current
+                                                                  .activeRunId ||
+                                                          run.status ==
+                                                              TranscriptionStatus
+                                                                  .queued ||
+                                                          run.status ==
+                                                              TranscriptionStatus
+                                                                  .running) {
+                                                        return;
+                                                      }
+                                                      final confirmed = await showDialog<bool>(
+                                                        context: context,
+                                                        builder: (context) => AlertDialog(
+                                                          title: const Text(
+                                                            'Delete run?',
+                                                          ),
+                                                          content: const Text(
+                                                            'This run and its transcript will be deleted.',
+                                                          ),
+                                                          actions: [
+                                                            TextButton(
+                                                              onPressed: () =>
+                                                                  Navigator.pop(
+                                                                    context,
+                                                                    false,
+                                                                  ),
+                                                              child: const Text(
+                                                                'Cancel',
+                                                              ),
+                                                            ),
+                                                            FilledButton(
+                                                              onPressed: () =>
+                                                                  Navigator.pop(
+                                                                    context,
+                                                                    true,
+                                                                  ),
+                                                              child: const Text(
+                                                                'Delete',
+                                                              ),
+                                                            ),
+                                                          ],
+                                                        ),
+                                                      );
+                                                      if (confirmed == true) {
+                                                        await repository
+                                                            .deleteRun(run.id);
+                                                      }
+                                                    },
+                                                    child: Text(
+                                                      _runLabel(run),
+                                                      maxLines: 1,
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                            onChanged: (runId) async {
+                                              if (runId == null) return;
+                                              final run = runs.firstWhere(
+                                                (item) => item.id == runId,
+                                              );
+                                              if (run.status ==
+                                                  TranscriptionStatus.done) {
+                                                await repository.setActiveRun(
+                                                  recording.id,
+                                                  runId,
+                                                );
+                                              }
+                                            },
+                                          ),
+                                        ),
+                                        IconButton(
+                                          tooltip: 'Compare runs',
+                                          onPressed: () => context.push(
+                                            '/recording/${recording.id}/compare',
+                                          ),
+                                          icon: const Icon(
+                                            Icons.compare_arrows,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    if (selected.status ==
+                                        TranscriptionStatus.failed)
+                                      Text(
+                                        selected.error ?? 'Run failed',
+                                        style: TextStyle(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.error,
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
+                            ),
                             const SizedBox(height: 8),
                             Text(
                               'Transcript',
@@ -1037,3 +1166,19 @@ String _formatSegmentTime(int milliseconds) {
 
 String _format(Duration duration) =>
     '${duration.inMinutes.toString().padLeft(2, '0')}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
+
+String _runLabel(TranscriptionRun run) {
+  final model = modelById(run.asrModelId ?? '')?.displayName ?? 'Unknown model';
+  final speakerCount = run.speakerCountHint == null
+      ? 'Auto'
+      : '${run.speakerCountHint} speakers';
+  final date = DateFormat('MM/dd HH:mm').format(run.createdAt.toLocal());
+  final elapsed = _format(Duration(milliseconds: run.processingMs));
+  final status = switch (run.status) {
+    TranscriptionStatus.queued => ' · Queued',
+    TranscriptionStatus.running => ' · Running',
+    TranscriptionStatus.failed => ' · Failed',
+    _ => '',
+  };
+  return '$model · ${run.languageHint.name} · $speakerCount · $date · $elapsed$status';
+}

@@ -7,6 +7,7 @@ import 'data/providers.dart';
 import 'domain/recording_repository.dart';
 import 'l10n/generated/app_localizations.dart';
 import 'screens/benchmark_screen.dart';
+import 'screens/compare_screen.dart';
 import 'screens/detail_screen.dart';
 import 'screens/library_screen.dart';
 import 'screens/models_screen.dart';
@@ -39,6 +40,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => DetailScreen(
           recordingId: state.pathParameters['id']!,
           initialPositionMs: int.tryParse(state.uri.queryParameters['t'] ?? ''),
+        ),
+      ),
+      GoRoute(
+        path: '/recording/:id/compare',
+        builder: (context, state) => CompareScreen(
+          recordingId: state.pathParameters['id']!,
+          runA: state.uri.queryParameters['a'],
+          runB: state.uri.queryParameters['b'],
         ),
       ),
       GoRoute(

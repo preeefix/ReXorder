@@ -41,6 +41,7 @@ Language note: a recording that switches EN↔JA between sentences or turns tran
 2. **Benchmark + offline transcription**: import models locally, benchmark them on the emulator and on Q.'s phone, then build the VAD → ASR pipeline (background isolate, resumable job), a transcript view synced to playback, and manual language override.
 3. **Speaker detection**: diarization, merge, speaker colors and renaming, speaker-count hint, re-run.
 4. **Transcript tools and charging-aware transcription**: export transcripts as TXT/SRT/VTT/JSON or copy text; search titles and transcript text with timestamp-linked results; add, rename, and delete recording bookmarks; and optionally pause resumable transcription until the phone is charging.
+5. **Run history and comparison**: preserve each model/language/speaker configuration as a separate transcription run, keep the last successful run visible during retries, and compare aligned segment text with token-level differences.
 
 ## Play Store: technical requirements (not planned yet)
 Items to re-check against current Play policy when the time comes:
