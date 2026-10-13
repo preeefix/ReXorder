@@ -89,156 +89,179 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
           initialData: const [],
           builder: (context, segmentsSnapshot) {
             final segments = segmentsSnapshot.data ?? const [];
-            return Scaffold(
-              appBar: AppBar(
-                title: Text(l10n.recordingDetails),
-                actions: [
-                  IconButton(
-                    tooltip: l10n.rename,
-                    onPressed: () => _rename(current),
-                    icon: const Icon(Icons.edit_outlined),
+            return StreamBuilder<Map<int, String>>(
+              stream: repository.watchSpeakerNames(recording.id),
+              initialData: const {},
+              builder: (context, namesSnapshot) {
+                final speakerNames = namesSnapshot.data ?? const {};
+                return Scaffold(
+                  appBar: AppBar(
+                    title: Text(l10n.recordingDetails),
+                    actions: [
+                      IconButton(
+                        tooltip: l10n.rename,
+                        onPressed: () => _rename(current),
+                        icon: const Icon(Icons.edit_outlined),
+                      ),
+                      IconButton(
+                        tooltip: l10n.share,
+                        onPressed: () => _share(current),
+                        icon: const Icon(Icons.share_outlined),
+                      ),
+                      IconButton(
+                        tooltip: l10n.delete,
+                        onPressed: () => _delete(current),
+                        icon: const Icon(Icons.delete_outline),
+                      ),
+                    ],
                   ),
-                  IconButton(
-                    tooltip: l10n.share,
-                    onPressed: () => _share(current),
-                    icon: const Icon(Icons.share_outlined),
-                  ),
-                  IconButton(
-                    tooltip: l10n.delete,
-                    onPressed: () => _delete(current),
-                    icon: const Icon(Icons.delete_outline),
-                  ),
-                ],
-              ),
-              body: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      current.title,
-                      style: Theme.of(context).textTheme.headlineSmall,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      DateFormat(
-                        'yyyy-MM-dd HH:mm',
-                      ).format(current.createdAt.toLocal()),
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 16),
-                    Card(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 16,
+                  body: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          current.title,
+                          style: Theme.of(context).textTheme.headlineSmall,
                         ),
-                        child: Column(
-                          children: [
-                            StreamBuilder<Duration?>(
-                              stream: _player.durationStream,
-                              builder: (context, snapshot) {
-                                final duration = snapshot.data ?? Duration.zero;
-                                return StreamBuilder<Duration>(
-                                  stream: _player.positionStream,
-                                  builder: (context, positionSnapshot) {
-                                    final position =
-                                        positionSnapshot.data ?? Duration.zero;
-                                    final maxMilliseconds = duration
-                                        .inMilliseconds
-                                        .toDouble()
-                                        .clamp(1.0, double.infinity);
-                                    return Column(
-                                      children: [
-                                        Slider(
-                                          value: position.inMilliseconds
-                                              .toDouble()
-                                              .clamp(0.0, maxMilliseconds),
-                                          max: maxMilliseconds,
-                                          onChanged: (value) => _player.seek(
-                                            Duration(
-                                              milliseconds: value.round(),
-                                            ),
-                                          ),
-                                        ),
-                                        Row(
-                                          mainAxisAlignment:
-                                              MainAxisAlignment.spaceBetween,
+                        const SizedBox(height: 8),
+                        Text(
+                          DateFormat(
+                            'yyyy-MM-dd HH:mm',
+                          ).format(current.createdAt.toLocal()),
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                        const SizedBox(height: 16),
+                        Card(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 16,
+                            ),
+                            child: Column(
+                              children: [
+                                StreamBuilder<Duration?>(
+                                  stream: _player.durationStream,
+                                  builder: (context, snapshot) {
+                                    final duration =
+                                        snapshot.data ?? Duration.zero;
+                                    return StreamBuilder<Duration>(
+                                      stream: _player.positionStream,
+                                      builder: (context, positionSnapshot) {
+                                        final position =
+                                            positionSnapshot.data ??
+                                            Duration.zero;
+                                        final maxMilliseconds = duration
+                                            .inMilliseconds
+                                            .toDouble()
+                                            .clamp(1.0, double.infinity);
+                                        return Column(
                                           children: [
-                                            Text(_format(position)),
-                                            Text(_format(duration)),
+                                            Slider(
+                                              value: position.inMilliseconds
+                                                  .toDouble()
+                                                  .clamp(0.0, maxMilliseconds),
+                                              max: maxMilliseconds,
+                                              onChanged: (value) =>
+                                                  _player.seek(
+                                                    Duration(
+                                                      milliseconds: value
+                                                          .round(),
+                                                    ),
+                                                  ),
+                                            ),
+                                            Row(
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
+                                              children: [
+                                                Text(_format(position)),
+                                                Text(_format(duration)),
+                                              ],
+                                            ),
                                           ],
-                                        ),
-                                      ],
+                                        );
+                                      },
                                     );
                                   },
-                                );
-                              },
+                                ),
+                                const SizedBox(height: 8),
+                                StreamBuilder<PlayerState>(
+                                  stream: _player.playerStateStream,
+                                  builder: (context, snapshot) {
+                                    final playing =
+                                        snapshot.data?.playing ?? false;
+                                    return IconButton.filled(
+                                      iconSize: 36,
+                                      onPressed: () => playing
+                                          ? _player.pause()
+                                          : _player.play(),
+                                      icon: Icon(
+                                        playing
+                                            ? Icons.pause_rounded
+                                            : Icons.play_arrow_rounded,
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 8),
-                            StreamBuilder<PlayerState>(
-                              stream: _player.playerStateStream,
-                              builder: (context, snapshot) {
-                                final playing = snapshot.data?.playing ?? false;
-                                return IconButton.filled(
-                                  iconSize: 36,
-                                  onPressed: () => playing
-                                      ? _player.pause()
-                                      : _player.play(),
-                                  icon: Icon(
-                                    playing
-                                        ? Icons.pause_rounded
-                                        : Icons.play_arrow_rounded,
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
+                        const TranscriptionModelsBanner(),
+                        ValueListenableBuilder<String?>(
+                          valueListenable: ref
+                              .read(transcriptionQueueProvider)
+                              .stage,
+                          builder: (context, stage, _) =>
+                              _TranscriptionStatusRow(
+                                recording: current,
+                                segments: segments,
+                                stage: stage,
+                                onTranscribe: () => _transcribe(current),
+                                onRetry: () => _retry(current),
+                              ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Transcript',
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
+                        const SizedBox(height: 8),
+                        Expanded(
+                          child: StreamBuilder<Duration>(
+                            stream: _player.positionStream,
+                            builder: (context, snapshot) {
+                              if (segments.isEmpty) {
+                                return const Center(
+                                  child: Text('No transcript segments yet.'),
+                                );
+                              }
+                              return _TranscriptList(
+                                segments: segments,
+                                speakerNames: speakerNames,
+                                position: snapshot.data ?? Duration.zero,
+                                onSeek: (position) => _player.seek(position),
+                                onRenameSpeaker: (speaker, name) =>
+                                    _renameSpeaker(recording.id, speaker, name),
+                              );
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        SizedBox(
+                          width: double.infinity,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _share(current),
+                            icon: const Icon(Icons.ios_share),
+                            label: Text(l10n.shareWav),
+                          ),
+                        ),
+                      ],
                     ),
-                    const TranscriptionModelsBanner(),
-                    _TranscriptionStatusRow(
-                      recording: current,
-                      segments: segments,
-                      onTranscribe: () => _transcribe(current),
-                      onRetry: () => _retry(current),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Transcript',
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 8),
-                    Expanded(
-                      child: StreamBuilder<Duration>(
-                        stream: _player.positionStream,
-                        builder: (context, snapshot) {
-                          if (segments.isEmpty) {
-                            return const Center(
-                              child: Text('No transcript segments yet.'),
-                            );
-                          }
-                          return _TranscriptList(
-                            segments: segments,
-                            position: snapshot.data ?? Duration.zero,
-                            onSeek: (position) => _player.seek(position),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _share(current),
-                        icon: const Icon(Icons.ios_share),
-                        label: Text(l10n.shareWav),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+                );
+              },
             );
           },
         );
@@ -270,7 +293,15 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
         : preferredInstalledAsr(models.map((model) => model.id))?.id ??
               models.first.id;
     var selectedLanguage = recording.languageHint;
-    final selection = await showModalBottomSheet<(String, LanguageHint)>(
+    final diarizationModelIds = ['pyannote-segmentation', 'campplus-zh-en'];
+    final hasDiarization = diarizationModelIds.every((id) {
+      final model = modelById(id)!;
+      return model.files.every(
+        (file) => installed[id]?.contains(file) ?? false,
+      );
+    });
+    var selectedSpeakerCount = recording.speakerCountHint ?? 0;
+    final selection = await showModalBottomSheet<(String, LanguageHint, int?)>(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) => SafeArea(
@@ -329,6 +360,30 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                     },
                   ),
                 ],
+                const SizedBox(height: 12),
+                if (hasDiarization)
+                  DropdownButtonFormField<int>(
+                    initialValue: selectedSpeakerCount,
+                    decoration: const InputDecoration(labelText: 'Speakers'),
+                    items: [
+                      const DropdownMenuItem(value: 0, child: Text('Auto')),
+                      for (var count = 1; count <= 6; count++)
+                        DropdownMenuItem(value: count, child: Text('$count')),
+                    ],
+                    onChanged: (value) {
+                      if (value != null) {
+                        setSheetState(() => selectedSpeakerCount = value);
+                      }
+                    },
+                  )
+                else
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      this.context.push('/settings/models');
+                    },
+                    child: const Text('Enable speaker detection in Models'),
+                  ),
                 const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
@@ -336,6 +391,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                     onPressed: () => Navigator.pop(context, (
                       selectedModelId,
                       selectedLanguage,
+                      selectedSpeakerCount == 0 ? null : selectedSpeakerCount,
                     )),
                     child: const Text('Start transcription'),
                   ),
@@ -350,13 +406,15 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     final reset =
         recording.transcriptionStatus == TranscriptionStatus.done ||
         recording.asrModelId != selection.$1 ||
-        recording.languageHint != selection.$2;
+        recording.languageHint != selection.$2 ||
+        recording.speakerCountHint != selection.$3;
     await ref
         .read(transcriptionQueueProvider)
         .enqueue(
           recording.id,
           modelId: selection.$1,
           language: selection.$2,
+          speakerCount: selection.$3,
           retranscribe: reset,
         );
   }
@@ -367,7 +425,43 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
         recording.id,
         modelId: recording.asrModelId,
         language: recording.languageHint,
+        speakerCount: recording.speakerCountHint,
       );
+
+  Future<void> _renameSpeaker(
+    String recordingId,
+    int speaker,
+    String? currentName,
+  ) async {
+    var enteredName = currentName ?? 'Speaker ${speaker + 1}';
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Rename Speaker ${speaker + 1}'),
+        content: TextFormField(
+          initialValue: enteredName,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Speaker name'),
+          textCapitalization: TextCapitalization.words,
+          onChanged: (value) => enteredName = value,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, enteredName),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    if (name == null) return;
+    await ref
+        .read(recordingRepositoryProvider)
+        .setSpeakerName(recordingId: recordingId, speaker: speaker, name: name);
+  }
 
   Future<void> _rename(Recording recording) async {
     final l10n = AppLocalizations.of(context)!;
@@ -441,12 +535,14 @@ class _TranscriptionStatusRow extends StatelessWidget {
   const _TranscriptionStatusRow({
     required this.recording,
     required this.segments,
+    required this.stage,
     required this.onTranscribe,
     required this.onRetry,
   });
 
   final Recording recording;
   final List<TranscriptSegment> segments;
+  final String? stage;
   final Future<void> Function() onTranscribe;
   final Future<void> Function() onRetry;
 
@@ -458,7 +554,10 @@ class _TranscriptionStatusRow extends StatelessWidget {
     final statusText = switch (status) {
       TranscriptionStatus.none => 'Not transcribed',
       TranscriptionStatus.queued => 'Queued',
-      TranscriptionStatus.running => 'Transcribing $completed/$total',
+      TranscriptionStatus.running =>
+        stage == 'speakers'
+            ? 'Detecting speakers…'
+            : 'Transcribing $completed/$total',
       TranscriptionStatus.done => 'Transcription complete',
       TranscriptionStatus.failed => 'Transcription failed',
     };
@@ -502,13 +601,17 @@ class _TranscriptionStatusRow extends StatelessWidget {
 class _TranscriptList extends StatefulWidget {
   const _TranscriptList({
     required this.segments,
+    required this.speakerNames,
     required this.position,
     required this.onSeek,
+    required this.onRenameSpeaker,
   });
 
   final List<TranscriptSegment> segments;
+  final Map<int, String> speakerNames;
   final Duration position;
   final ValueChanged<Duration> onSeek;
+  final void Function(int speaker, String? currentName) onRenameSpeaker;
 
   @override
   State<_TranscriptList> createState() => _TranscriptListState();
@@ -578,24 +681,93 @@ class _TranscriptListState extends State<_TranscriptList> {
         final segment = widget.segments[index];
         final highlighted = index == activeIndex;
         final language = segment.lang;
-        return Card(
+        final speaker = segment.speaker;
+        final showSpeaker =
+            speaker != null &&
+            (index == 0 || widget.segments[index - 1].speaker != speaker);
+        final speakerName = speaker == null
+            ? null
+            : widget.speakerNames[speaker];
+        return Column(
           key: _itemKeys[index],
-          color: highlighted
-              ? Theme.of(context).colorScheme.primaryContainer
-              : null,
-          child: ListTile(
-            onTap: () => widget.onSeek(Duration(milliseconds: segment.startMs)),
-            leading: Text(_formatSegmentTime(segment.startMs)),
-            title: Text(segment.text ?? '…'),
-            trailing: language != null && language != majorityLanguage
-                ? Chip(
-                    label: Text(language),
-                    visualDensity: VisualDensity.compact,
-                  )
-                : null,
-          ),
+          children: [
+            if (showSpeaker)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 8, top: 4),
+                  child: _SpeakerChip(
+                    speaker: speaker,
+                    name: speakerName ?? 'Speaker ${speaker + 1}',
+                    onTap: () => widget.onRenameSpeaker(speaker, speakerName),
+                  ),
+                ),
+              ),
+            Card(
+              color: highlighted
+                  ? Theme.of(context).colorScheme.primaryContainer
+                  : null,
+              child: ListTile(
+                onTap: () =>
+                    widget.onSeek(Duration(milliseconds: segment.startMs)),
+                leading: Text(_formatSegmentTime(segment.startMs)),
+                title: Text(segment.text ?? '…'),
+                trailing: language != null && language != majorityLanguage
+                    ? Chip(
+                        label: Text(language),
+                        visualDensity: VisualDensity.compact,
+                      )
+                    : null,
+              ),
+            ),
+          ],
         );
       },
+    );
+  }
+}
+
+const _speakerPalette = [
+  Color(0xFF1565C0),
+  Color(0xFFC62828),
+  Color(0xFF2E7D32),
+  Color(0xFF6A1B9A),
+  Color(0xFFEF6C00),
+  Color(0xFF00838F),
+  Color(0xFFAD1457),
+  Color(0xFF827717),
+];
+
+class _SpeakerChip extends StatelessWidget {
+  const _SpeakerChip({
+    required this.speaker,
+    required this.name,
+    required this.onTap,
+  });
+
+  final int speaker;
+  final String name;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = _speakerPalette[speaker % _speakerPalette.length];
+    final background = Color.lerp(
+      base,
+      Theme.of(context).brightness == Brightness.dark
+          ? Colors.black
+          : Colors.white,
+      Theme.of(context).brightness == Brightness.dark ? 0.55 : 0.82,
+    )!;
+    final foreground = background.computeLuminance() > 0.4
+        ? Colors.black
+        : Colors.white;
+    return ActionChip(
+      label: Text(name),
+      backgroundColor: background,
+      side: BorderSide(color: base),
+      labelStyle: TextStyle(color: foreground),
+      onPressed: onTap,
     );
   }
 }
