@@ -127,29 +127,42 @@ class MainActivity : FlutterActivity() {
         ).setMethodCallHandler { call, result ->
             when (call.method) {
                 "start" -> {
-                    val intent = Intent(this, ProcessingService::class.java)
-                        .putExtra(ProcessingService.EXTRA_TITLE, call.argument<String>("title"))
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        startForegroundService(intent)
-                    } else {
-                        startService(intent)
+                    try {
+                        val intent = Intent(this, ProcessingService::class.java)
+                            .putExtra(
+                                ProcessingService.EXTRA_TITLE,
+                                call.argument<String>("title"),
+                            )
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                            startForegroundService(intent)
+                        } else {
+                            startService(intent)
+                        }
+                        result.success(null)
+                    } catch (error: Exception) {
+                        result.error(
+                            "fgs_start_failed",
+                            error.message ?: "Unable to start transcription service.",
+                            null,
+                        )
                     }
-                    result.success(null)
                 }
                 "update" -> {
-                    val intent = Intent(this, ProcessingService::class.java)
-                        .putExtra(ProcessingService.EXTRA_TITLE, call.argument<String>("title"))
-                        .putExtra(
-                            ProcessingService.EXTRA_PROGRESS,
+                    try {
+                        ProcessingService.notifyProgress(
+                            this,
+                            call.argument<String>("title") ?: "Transcribing",
                             call.argument<Int>("progress") ?: 0,
+                            call.argument<Int>("max") ?: 0,
                         )
-                        .putExtra(ProcessingService.EXTRA_MAX, call.argument<Int>("max") ?: 0)
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        startForegroundService(intent)
-                    } else {
-                        startService(intent)
+                        result.success(null)
+                    } catch (error: Exception) {
+                        result.error(
+                            "notification_update_failed",
+                            error.message ?: "Unable to update transcription notification.",
+                            null,
+                        )
                     }
-                    result.success(null)
                 }
                 "stop" -> {
                     stopService(Intent(this, ProcessingService::class.java))

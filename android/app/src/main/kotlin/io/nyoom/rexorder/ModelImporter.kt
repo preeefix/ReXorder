@@ -3,6 +3,7 @@ package io.nyoom.rexorder
 import android.content.ContentResolver
 import android.database.Cursor
 import android.net.Uri
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream
@@ -40,6 +41,8 @@ class ModelImporter(
         val partialDirectory = File(modelRoot, "$modelId.partial")
         val destination = File(modelRoot, modelId)
         val backup = File(modelRoot, "$modelId.previous")
+        var lastProgressBytes = 0L
+        var lastProgressTime = SystemClock.elapsedRealtime()
         try {
             val expectedLength = queryLength(uri)
             val digest = MessageDigest.getInstance("SHA-256")
@@ -53,8 +56,17 @@ class ModelImporter(
                         output.write(buffer, 0, count)
                         digest.update(buffer, 0, count)
                         bytesRead += count
-                        onProgress(bytesRead, expectedLength)
+                        val elapsedTime = SystemClock.elapsedRealtime() - lastProgressTime
+                        if (
+                            bytesRead - lastProgressBytes >= PROGRESS_BYTES_INTERVAL &&
+                            elapsedTime >= PROGRESS_TIME_INTERVAL_MS
+                        ) {
+                            onProgress(bytesRead, expectedLength)
+                            lastProgressBytes = bytesRead
+                            lastProgressTime = SystemClock.elapsedRealtime()
+                        }
                     }
+                    onProgress(bytesRead, expectedLength)
                 }
             } ?: throw IOException("Unable to open the selected document.")
 
@@ -199,5 +211,7 @@ class ModelImporter(
 
     companion object {
         private const val COPY_BUFFER_SIZE = 64 * 1024
+        private const val PROGRESS_BYTES_INTERVAL = 1024 * 1024
+        private const val PROGRESS_TIME_INTERVAL_MS = 100L
     }
 }

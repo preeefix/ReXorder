@@ -118,7 +118,7 @@ class TranscriptionQueue {
       languageHint: recording.languageHint,
     );
     try {
-      await _startService(recording.title);
+      await _startServiceBestEffort(recording.title);
       if (_processor == null) {
         _worker = await TranscriptionWorker.spawn(
           modelsDirectory: modelsDirectory,
@@ -144,7 +144,11 @@ class TranscriptionQueue {
         language: recording.languageHint.name,
       );
       var completed = segments.where((segment) => segment.text != null).length;
-      await _updateService(recording.title, completed, segments.length);
+      await _updateServiceBestEffort(
+        recording.title,
+        completed,
+        segments.length,
+      );
       for (final segment in segments) {
         if (segment.text != null) continue;
         final result = await processor.transcribe(
@@ -158,7 +162,11 @@ class TranscriptionQueue {
           lang: result.language,
         );
         completed++;
-        await _updateService(recording.title, completed, segments.length);
+        await _updateServiceBestEffort(
+          recording.title,
+          completed,
+          segments.length,
+        );
       }
       await processor.closeModel();
       await repository.updateTranscription(
@@ -180,8 +188,30 @@ class TranscriptionQueue {
         error: error.toString(),
       );
     } finally {
-      await _stopService();
+      await _stopServiceBestEffort();
     }
+  }
+
+  Future<void> _startServiceBestEffort(String title) async {
+    try {
+      await _startService(title);
+    } catch (_) {}
+  }
+
+  Future<void> _updateServiceBestEffort(
+    String title,
+    int progress,
+    int max,
+  ) async {
+    try {
+      await _updateService(title, progress, max);
+    } catch (_) {}
+  }
+
+  Future<void> _stopServiceBestEffort() async {
+    try {
+      await _stopService();
+    } catch (_) {}
   }
 
   Future<void> dispose() async {

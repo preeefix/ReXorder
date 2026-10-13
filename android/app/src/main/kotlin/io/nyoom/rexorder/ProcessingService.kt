@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -17,14 +18,7 @@ class ProcessingService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Transcription",
-                NotificationManager.IMPORTANCE_LOW,
-            )
-            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
-        }
+        createNotificationChannel(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -33,7 +27,7 @@ class ProcessingService : Service() {
             progress = intent.getIntExtra(EXTRA_PROGRESS, progress)
             max = intent.getIntExtra(EXTRA_MAX, max)
         }
-        val notification = buildNotification()
+        val notification = buildNotification(this, title, progress, max)
         if (Build.VERSION.SDK_INT >= 35) {
             startForeground(
                 NOTIFICATION_ID,
@@ -49,34 +43,7 @@ class ProcessingService : Service() {
         } else {
             startForeground(NOTIFICATION_ID, notification)
         }
-        getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification)
         return START_NOT_STICKY
-    }
-
-    private fun buildNotification(): Notification {
-        val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
-        val pendingIntent = launchIntent?.let {
-            PendingIntent.getActivity(
-                this,
-                1,
-                it,
-                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-            )
-        }
-        val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            Notification.Builder(this, CHANNEL_ID)
-        } else {
-            @Suppress("DEPRECATION")
-            Notification.Builder(this)
-        }
-        return builder
-            .setContentTitle("Transcribing $title — $progress/$max")
-            .setContentText("ReXorder is processing audio offline")
-            .setSmallIcon(android.R.drawable.ic_menu_info_details)
-            .setOngoing(true)
-            .setProgress(max, progress, max == 0)
-            .setContentIntent(pendingIntent)
-            .build()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -87,5 +54,56 @@ class ProcessingService : Service() {
         const val EXTRA_MAX = "max"
         private const val CHANNEL_ID = "rexorder_processing"
         private const val NOTIFICATION_ID = 702
+
+        fun notifyProgress(context: Context, title: String, progress: Int, max: Int) {
+            createNotificationChannel(context)
+            val notification = buildNotification(context, title, progress, max)
+            context.getSystemService(NotificationManager::class.java)
+                .notify(NOTIFICATION_ID, notification)
+        }
+
+        private fun createNotificationChannel(context: Context) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
+                    CHANNEL_ID,
+                    "Transcription",
+                    NotificationManager.IMPORTANCE_LOW,
+                )
+                context.getSystemService(NotificationManager::class.java)
+                    .createNotificationChannel(channel)
+            }
+        }
+
+        private fun buildNotification(
+            context: Context,
+            title: String,
+            progress: Int,
+            max: Int,
+        ): Notification {
+            val launchIntent = context.packageManager
+                .getLaunchIntentForPackage(context.packageName)
+            val pendingIntent = launchIntent?.let {
+                PendingIntent.getActivity(
+                    context,
+                    1,
+                    it,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            }
+            val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                Notification.Builder(context, CHANNEL_ID)
+            } else {
+                @Suppress("DEPRECATION")
+                Notification.Builder(context)
+            }
+            return builder
+                .setContentTitle("Transcribing $title — $progress/$max")
+                .setContentText("ReXorder is processing audio offline")
+                .setSmallIcon(android.R.drawable.ic_menu_info_details)
+                .setOngoing(true)
+                .setProgress(max, progress, max == 0)
+                .setContentIntent(pendingIntent)
+                .build()
+        }
     }
 }

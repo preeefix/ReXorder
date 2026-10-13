@@ -112,6 +112,33 @@ void main() {
     expect(completed.transcriptionStatus, TranscriptionStatus.done);
   });
 
+  test('service failures do not fail transcription', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.recording('service-failure');
+    await fixture.repository.updateTranscription(
+      id: recording.id,
+      status: TranscriptionStatus.queued,
+      modelId: 'whisper-small',
+    );
+    final queue = fixture.queue(
+      _FakeProcessor(),
+      startService: (_) async => throw StateError('service start failed'),
+      updateService: (_, _, _) async =>
+          throw StateError('service update failed'),
+      stopService: () async => throw StateError('service stop failed'),
+    );
+
+    await queue.processQueue();
+
+    final completed = (await fixture.repository.getRecording(recording.id))!;
+    final segments = await fixture.repository.listTranscriptSegments(
+      recording.id,
+    );
+    expect(completed.transcriptionStatus, TranscriptionStatus.done);
+    expect(segments.single.text, 'recognized');
+  });
+
   test('startup moves running jobs back to queued', () async {
     final fixture = await _Fixture.create();
     addTearDown(fixture.dispose);
@@ -184,15 +211,20 @@ class _Fixture {
     return recording;
   }
 
-  TranscriptionQueue queue(_FakeProcessor processor) => TranscriptionQueue(
+  TranscriptionQueue queue(
+    _FakeProcessor processor, {
+    Future<void> Function(String)? startService,
+    Future<void> Function(String, int, int)? updateService,
+    Future<void> Function()? stopService,
+  }) => TranscriptionQueue(
     repository: repository,
     recordingsDirectory: Directory('${directory.path}/recordings'),
     modelsDirectory: modelsDirectory,
     modelClient: _FakeModelClient(),
     processor: processor,
-    startService: (_) async {},
-    updateService: (_, _, _) async {},
-    stopService: () async {},
+    startService: startService ?? (_) async {},
+    updateService: updateService ?? (_, _, _) async {},
+    stopService: stopService ?? () async {},
   );
 
   Future<void> dispose() async {
