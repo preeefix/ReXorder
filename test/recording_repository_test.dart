@@ -2,8 +2,10 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rexorder/data/database.dart';
+import 'package:rexorder/domain/recording.dart';
 import 'package:rexorder/domain/recording_repository.dart';
 import 'package:rexorder/domain/transcript_segment.dart';
+import 'package:rexorder/export/transcript_export.dart';
 
 void main() {
   test(
@@ -204,5 +206,144 @@ void main() {
 
     await repository.deleteBookmark(earlier.id);
     expect(await bookmarks.first, [renamed.last]);
+  });
+
+  test(
+    'transcript reads, search, and export use the active run only',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'rexorder-run-history-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final database = AppDatabase.memory();
+      addTearDown(database.close);
+      final repository = RecordingRepository(database, directory);
+      final recording = await repository.createRecording(
+        id: 'run-history',
+        title: 'Model comparison',
+      );
+      await repository.replaceTranscriptSegments(recording.id, const [
+        TranscriptSegmentDraft(
+          index: 0,
+          startMs: 0,
+          endMs: 1000,
+          text: 'old transcript phrase',
+        ),
+      ]);
+      final oldRunId = (await repository.getRecording(
+        recording.id,
+      ))!.activeRunId!;
+      final newRun = await repository.createTranscriptionRun(
+        recordingId: recording.id,
+        modelId: 'whisper-small',
+        status: TranscriptionStatus.done,
+      );
+      await repository.replaceTranscriptSegments(recording.id, const [
+        TranscriptSegmentDraft(
+          index: 0,
+          startMs: 0,
+          endMs: 1000,
+          text: 'new transcript phrase',
+        ),
+      ], runId: newRun.id);
+
+      expect(
+        (await repository.search('old transcript')).single.text,
+        'old transcript phrase',
+      );
+      expect(await repository.search('new transcript'), isEmpty);
+      expect(
+        (await repository.listTranscriptSegments(recording.id)).single.text,
+        'old transcript phrase',
+      );
+
+      await repository.setActiveRun(recording.id, newRun.id);
+      expect(await repository.search('old transcript'), isEmpty);
+      expect(
+        (await repository.search('new transcript')).single.text,
+        'new transcript phrase',
+      );
+      expect(
+        (await repository.listTranscriptSegments(recording.id)).single.text,
+        'new transcript phrase',
+      );
+      final exported = exportTxt(
+        (await repository.getRecording(recording.id))!,
+        await repository.listTranscriptSegments(recording.id),
+        await repository.speakerNames(recording.id),
+      );
+      expect(exported, contains('new transcript phrase'));
+      expect(exported, isNot(contains('old transcript phrase')));
+      expect(oldRunId, isNot(newRun.id));
+    },
+  );
+
+  test('deleteRun protects active and in-progress runs', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'rexorder-delete-run-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final database = AppDatabase.memory();
+    addTearDown(database.close);
+    final repository = RecordingRepository(database, directory);
+    final recording = await repository.createRecording(id: 'delete-run');
+    await repository.replaceTranscriptSegments(recording.id, const [
+      TranscriptSegmentDraft(
+        index: 0,
+        startMs: 0,
+        endMs: 1000,
+        text: 'active transcript',
+      ),
+    ]);
+    final activeRunId = (await repository.getRecording(
+      recording.id,
+    ))!.activeRunId!;
+    await expectLater(repository.deleteRun(activeRunId), throwsStateError);
+
+    final queuedRun = await repository.createTranscriptionRun(
+      recordingId: recording.id,
+    );
+    await expectLater(repository.deleteRun(queuedRun.id), throwsStateError);
+
+    final runningRun = await repository.createTranscriptionRun(
+      recordingId: recording.id,
+      status: TranscriptionStatus.running,
+    );
+    await expectLater(repository.deleteRun(runningRun.id), throwsStateError);
+
+    final failedRun = await repository.createTranscriptionRun(
+      recordingId: recording.id,
+      status: TranscriptionStatus.failed,
+    );
+    await repository.replaceTranscriptSegments(recording.id, const [
+      TranscriptSegmentDraft(
+        index: 0,
+        startMs: 1000,
+        endMs: 2000,
+        text: 'failed run text',
+        speaker: 0,
+      ),
+    ], runId: failedRun.id);
+    await database
+        .into(database.speakerNames)
+        .insert(
+          SpeakerNamesCompanion.insert(
+            recordingId: recording.id,
+            runId: failedRun.id,
+            speaker: 0,
+            name: 'Temporary',
+          ),
+        );
+
+    await repository.deleteRun(failedRun.id);
+
+    expect(await repository.getRun(failedRun.id), isNull);
+    expect(await repository.listRunSegments(failedRun.id), isEmpty);
+    expect(
+      await (database.select(
+        database.speakerNames,
+      )..where((row) => row.runId.equals(failedRun.id))).get(),
+      isEmpty,
+    );
   });
 }

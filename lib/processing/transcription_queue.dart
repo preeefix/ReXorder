@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../domain/recording.dart';
 import '../domain/recording_repository.dart';
 import '../domain/transcript_segment.dart';
+import '../domain/transcription_run.dart';
 import '../models/model_catalog.dart';
 import '../models/model_import_client.dart';
 import 'power_channel.dart';
@@ -75,13 +76,8 @@ class TranscriptionQueue {
     int? speakerCount,
     bool retranscribe = false,
   }) async {
-    if (retranscribe) {
-      await repository.deleteTranscriptSegments(recordingId);
-      await repository.clearSpeakerNames(recordingId);
-    }
-    await repository.updateTranscription(
-      id: recordingId,
-      status: TranscriptionStatus.queued,
+    await repository.createTranscriptionRun(
+      recordingId: recordingId,
       modelId: modelId,
       languageHint: language,
       speakerCountHint: speakerCount,
@@ -131,8 +127,10 @@ class TranscriptionQueue {
               (file) => installed[model.id]?.contains(file) ?? false,
             ),
           );
-      final recording = queued.first;
-      final requestedModel = modelById(recording.asrModelId ?? '');
+      final job = queued.first;
+      final recording = job.recording;
+      final run = job.run;
+      final requestedModel = modelById(run.asrModelId ?? '');
       final model =
           requestedModel != null &&
               installedAsr.any((item) => item.id == requestedModel.id)
@@ -140,6 +138,7 @@ class TranscriptionQueue {
           : preferredAsr;
       await _processRecording(
         recording,
+        run,
         model,
         diarizationInstalled: diarizationInstalled,
       );
@@ -149,6 +148,7 @@ class TranscriptionQueue {
 
   Future<void> _processRecording(
     Recording recording,
+    TranscriptionRun run,
     CatalogModel model, {
     required bool diarizationInstalled,
   }) async {
@@ -164,8 +164,10 @@ class TranscriptionQueue {
       await repository.updateTranscription(
         id: recording.id,
         status: TranscriptionStatus.failed,
+        runId: run.id,
         modelId: model.id,
-        speakerCountHint: recording.speakerCountHint,
+        languageHint: run.languageHint,
+        speakerCountHint: run.speakerCountHint,
         error: 'Recording or VAD model file is missing.',
       );
       return;
@@ -173,10 +175,12 @@ class TranscriptionQueue {
     await repository.updateTranscription(
       id: recording.id,
       status: TranscriptionStatus.running,
+      runId: run.id,
       modelId: model.id,
-      languageHint: recording.languageHint,
-      speakerCountHint: recording.speakerCountHint,
+      languageHint: run.languageHint,
+      speakerCountHint: run.speakerCountHint,
     );
+    final stopwatch = Stopwatch()..start();
     try {
       await _startServiceBestEffort(recording.title);
       if (_processor == null) {
@@ -186,11 +190,12 @@ class TranscriptionQueue {
         _processor = _worker;
       }
       final processor = _processor!;
-      var segments = await repository.listTranscriptSegments(recording.id);
+      var segments = await repository.listRunSegments(run.id);
+      var diarized = run.diarized;
       if (segments.isEmpty) {
         final ranges = await processor.segment(wavFile, vadFile.path);
         List<TranscriptSegmentDraft> drafts;
-        if (diarizationInstalled && recording.speakerCountHint != 1) {
+        if (diarizationInstalled && run.speakerCountHint != 1) {
           final segmentation = modelById('pyannote-segmentation')!;
           final embedding = modelById('campplus-zh-en')!;
           stage.value = 'speakers';
@@ -206,7 +211,7 @@ class TranscriptionQueue {
               embedding.id,
               embedding.files.single,
             ),
-            speakerCountHint: recording.speakerCountHint,
+            speakerCountHint: run.speakerCountHint,
             onProgress: (done, total) => unawaited(
               _updateServiceBestEffort(
                 recording.title,
@@ -217,6 +222,7 @@ class TranscriptionQueue {
             ),
           );
           final pieces = splitBySpeaker(ranges, turns);
+          diarized = pieces.any((piece) => piece.speaker != null);
           drafts = [
             for (var index = 0; index < pieces.length; index++)
               _speakerDraft(index, pieces[index]),
@@ -231,14 +237,15 @@ class TranscriptionQueue {
               ),
           ];
         }
-        await repository.replaceTranscriptSegments(recording.id, drafts);
-        segments = await repository.listTranscriptSegments(recording.id);
+        await repository.replaceTranscriptSegments(
+          recording.id,
+          drafts,
+          runId: run.id,
+        );
+        segments = await repository.listRunSegments(run.id);
       }
       stage.value = 'transcribing';
-      await processor.openModel(
-        model: model,
-        language: recording.languageHint.name,
-      );
+      await processor.openModel(model: model, language: run.languageHint.name);
       var completed = segments.where((segment) => segment.text != null).length;
       await _updateServiceBestEffort(
         recording.title,
@@ -250,12 +257,16 @@ class TranscriptionQueue {
         if (segment.text != null) continue;
         if (await _shouldWaitForCharger()) {
           await processor.closeModel();
+          stopwatch.stop();
           await repository.updateTranscription(
             id: recording.id,
             status: TranscriptionStatus.queued,
+            runId: run.id,
             modelId: model.id,
-            languageHint: recording.languageHint,
-            speakerCountHint: recording.speakerCountHint,
+            languageHint: run.languageHint,
+            speakerCountHint: run.speakerCountHint,
+            processingMsDelta: stopwatch.elapsedMilliseconds,
+            diarized: diarized,
           );
           return;
         }
@@ -278,14 +289,19 @@ class TranscriptionQueue {
         );
       }
       await processor.closeModel();
+      stopwatch.stop();
       await repository.updateTranscription(
         id: recording.id,
         status: TranscriptionStatus.done,
+        runId: run.id,
         modelId: model.id,
-        languageHint: recording.languageHint,
-        speakerCountHint: recording.speakerCountHint,
+        languageHint: run.languageHint,
+        speakerCountHint: run.speakerCountHint,
+        processingMsDelta: stopwatch.elapsedMilliseconds,
+        diarized: diarized,
       );
     } catch (error) {
+      stopwatch.stop();
       try {
         await _processor?.closeModel();
       } catch (_) {
@@ -294,9 +310,12 @@ class TranscriptionQueue {
       await repository.updateTranscription(
         id: recording.id,
         status: TranscriptionStatus.failed,
+        runId: run.id,
         modelId: model.id,
+        languageHint: run.languageHint,
         error: error.toString(),
-        speakerCountHint: recording.speakerCountHint,
+        speakerCountHint: run.speakerCountHint,
+        processingMsDelta: stopwatch.elapsedMilliseconds,
       );
     } finally {
       stage.value = null;

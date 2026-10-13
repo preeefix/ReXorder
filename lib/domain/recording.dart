@@ -23,5 +23,6 @@ abstract class Recording with _$Recording {
     String? asrModelId,
     String? transcriptionError,
     int? speakerCountHint,
+    String? activeRunId,
   }) = _Recording;
 }

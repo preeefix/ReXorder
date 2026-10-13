@@ -135,7 +135,7 @@ void main() {
     );
   });
 
-  test('re-transcribe clears prior segments before VAD and decoding', () async {
+  test('re-transcribe preserves prior runs and switches on success', () async {
     final fixture = await _Fixture.create();
     addTearDown(fixture.dispose);
     final recording = await fixture.recording('reset');
@@ -153,6 +153,9 @@ void main() {
         lang: 'en',
       ),
     ]);
+    final previousRunId = (await fixture.repository.getRecording(
+      recording.id,
+    ))!.activeRunId!;
     final processor = _FakeProcessor()
       ..ranges = [const SpeechSampleRange(160, 320)];
     final queue = fixture.queue(processor);
@@ -174,6 +177,51 @@ void main() {
     expect(segments.single.endMs, 20);
     expect(segments.single.text, 'recognized');
     expect(await fixture.repository.speakerNames(recording.id), isEmpty);
+    final runs = await fixture.repository.watchRuns(recording.id).first;
+    expect(runs, hasLength(2));
+    expect(runs.first.id, isNot(previousRunId));
+    expect(runs.first.status, TranscriptionStatus.done);
+    expect(runs.last.id, previousRunId);
+    expect(
+      (await fixture.repository.listRunSegments(previousRunId)).single.text,
+      'old text',
+    );
+  });
+
+  test('failed re-transcription keeps the previous active run', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.recording('failed-retranscription');
+    await fixture.repository.replaceTranscriptSegments(recording.id, const [
+      TranscriptSegmentDraft(
+        index: 0,
+        startMs: 0,
+        endMs: 300,
+        text: 'last good transcript',
+        lang: 'en',
+      ),
+    ]);
+    final previousRunId = (await fixture.repository.getRecording(
+      recording.id,
+    ))!.activeRunId!;
+    final processor = _FakeProcessor()..failedPaths.add(recording.fileName);
+    final queue = fixture.queue(processor);
+
+    await queue.enqueue(recording.id, modelId: 'whisper-small');
+    await queue.processQueue();
+
+    final updated = (await fixture.repository.getRecording(recording.id))!;
+    expect(updated.activeRunId, previousRunId);
+    expect(
+      (await fixture.repository.listTranscriptSegments(
+        recording.id,
+      )).single.text,
+      'last good transcript',
+    );
+    expect(
+      (await fixture.repository.watchRuns(recording.id).first).first.status,
+      TranscriptionStatus.failed,
+    );
   });
 
   test('failed job records its error and queue continues', () async {
@@ -474,8 +522,18 @@ void main() {
 
       await queue.processQueue();
 
-      final pausedSegments = await fixture.repository.listTranscriptSegments(
+      expect(processor.transcribeCalls, 1);
+      expect(queue.waitingForCharger.value, isTrue);
+      final pausedRunId = (await fixture.repository.getRecording(
         recording.id,
+      ))!.activeRunId;
+      expect(pausedRunId, isNull);
+      final runBeforeResume =
+          (await fixture.repository.watchRuns(recording.id).first).single;
+      expect(runBeforeResume.status, TranscriptionStatus.queued);
+      expect(runBeforeResume.processingMs, greaterThanOrEqualTo(0));
+      final pausedSegments = await fixture.repository.listRunSegments(
+        runBeforeResume.id,
       );
       expect(pausedSegments, hasLength(3));
       expect(pausedSegments.map((segment) => segment.text), [
@@ -483,8 +541,6 @@ void main() {
         null,
         null,
       ]);
-      expect(processor.transcribeCalls, 1);
-      expect(queue.waitingForCharger.value, isTrue);
       expect(
         (await fixture.repository.getRecording(
           recording.id,
@@ -508,6 +564,16 @@ void main() {
       expect(processor.segmentCalls, 1);
       expect(processor.transcribeCalls, 3);
       expect(queue.waitingForCharger.value, isFalse);
+      final completedRuns = await fixture.repository
+          .watchRuns(recording.id)
+          .first;
+      expect(completedRuns, hasLength(1));
+      expect(completedRuns.single.id, runBeforeResume.id);
+      expect(completedRuns.single.status, TranscriptionStatus.done);
+      expect(
+        (await fixture.repository.getRecording(recording.id))!.activeRunId,
+        runBeforeResume.id,
+      );
     },
   );
 

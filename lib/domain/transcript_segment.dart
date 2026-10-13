@@ -3,6 +3,7 @@ class TranscriptSegment {
     required this.id,
     required this.recordingId,
     required this.index,
+    this.runId,
     required this.startMs,
     required this.endMs,
     this.text,
@@ -13,6 +14,7 @@ class TranscriptSegment {
   final int id;
   final String recordingId;
   final int index;
+  final String? runId;
   final int startMs;
   final int endMs;
   final String? text;
@@ -25,12 +27,14 @@ class TranscriptSegmentDraft {
     required this.index,
     required this.startMs,
     required this.endMs,
+    this.runId,
     this.text,
     this.lang,
     this.speaker,
   });
 
   final int index;
+  final String? runId;
   final int startMs;
   final int endMs;
   final String? text;
