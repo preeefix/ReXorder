@@ -17,6 +17,15 @@ Future<void> recoverOrphanedRecordings({
       final id = p.basenameWithoutExtension(entity.path);
       final wav = File(p.join(recordingsDirectory.path, '$id.wav'));
       final createdAt = await entity.lastModified();
+      if (await entity.length() == 0) {
+        await entity.delete();
+        if (await repository.getRecording(id) != null) {
+          await repository.delete(id);
+        } else if (await wav.exists()) {
+          await wav.delete();
+        }
+        continue;
+      }
       final duration = durationFromPcmBytes(await entity.length());
       await wrapPcmToWav(entity, wav);
       await entity.delete();

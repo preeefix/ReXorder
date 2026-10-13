@@ -7,6 +7,7 @@ import 'package:uuid/uuid.dart';
 
 import '../data/database.dart' as db;
 import 'recording.dart';
+import 'transcript_segment.dart';
 
 class RecordingRepository {
   RecordingRepository(
@@ -34,6 +35,13 @@ class RecordingRepository {
           ..orderBy([(row) => drift.OrderingTerm.desc(row.createdAt)]))
         .watch()
         .map((rows) => rows.map(_toDomain).toList());
+  }
+
+  Stream<Recording?> watchRecording(String id) {
+    return (_database.select(_database.recordings)
+          ..where((recording) => recording.id.equals(id)))
+        .watch()
+        .map((rows) => rows.isEmpty ? null : _toDomain(rows.single));
   }
 
   Future<Recording?> getRecording(String id) async {
@@ -129,5 +137,151 @@ class RecordingRepository {
     fileName: row.fileName,
     sampleRate: row.sampleRate,
     status: row.status,
+    transcriptionStatus: row.transcriptionStatus,
+    languageHint: row.languageHint,
+    asrModelId: row.asrModelId,
+    transcriptionError: row.transcriptionError,
   );
+
+  Future<void> updateTranscription({
+    required String id,
+    required TranscriptionStatus status,
+    String? modelId,
+    LanguageHint? languageHint,
+    String? error,
+  }) async {
+    await (_database.update(
+      _database.recordings,
+    )..where((row) => row.id.equals(id))).write(
+      db.RecordingsCompanion(
+        transcriptionStatus: drift.Value(status),
+        asrModelId: modelId == null
+            ? const drift.Value.absent()
+            : drift.Value(modelId),
+        languageHint: languageHint == null
+            ? const drift.Value.absent()
+            : drift.Value(languageHint),
+        transcriptionError: drift.Value(error),
+      ),
+    );
+  }
+
+  Future<List<Recording>> listQueuedTranscriptions() async {
+    final rows =
+        await (_database.select(_database.recordings)
+              ..where(
+                (row) => row.transcriptionStatus.equals(
+                  TranscriptionStatus.queued.name,
+                ),
+              )
+              ..orderBy([(row) => drift.OrderingTerm.asc(row.createdAt)]))
+            .get();
+    return rows.map(_toDomain).toList();
+  }
+
+  Future<void> requeueRunningTranscriptions() async {
+    await (_database.update(_database.recordings)..where(
+          (row) =>
+              row.transcriptionStatus.equals(TranscriptionStatus.running.name),
+        ))
+        .write(
+          const db.RecordingsCompanion(
+            transcriptionStatus: drift.Value(TranscriptionStatus.queued),
+          ),
+        );
+  }
+
+  Stream<List<TranscriptSegment>> watchTranscriptSegments(String recordingId) {
+    return (_database.select(_database.transcriptSegments)
+          ..where((row) => row.recordingId.equals(recordingId))
+          ..orderBy([(row) => drift.OrderingTerm.asc(row.idx)]))
+        .watch()
+        .map(
+          (rows) => rows
+              .map(
+                (row) => TranscriptSegment(
+                  id: row.id,
+                  recordingId: row.recordingId,
+                  index: row.idx,
+                  startMs: row.startMs,
+                  endMs: row.endMs,
+                  text: row.content,
+                  lang: row.lang,
+                  speaker: row.speaker,
+                ),
+              )
+              .toList(),
+        );
+  }
+
+  Future<List<TranscriptSegment>> listTranscriptSegments(
+    String recordingId,
+  ) async {
+    final rows =
+        await (_database.select(_database.transcriptSegments)
+              ..where((row) => row.recordingId.equals(recordingId))
+              ..orderBy([(row) => drift.OrderingTerm.asc(row.idx)]))
+            .get();
+    return rows
+        .map(
+          (row) => TranscriptSegment(
+            id: row.id,
+            recordingId: row.recordingId,
+            index: row.idx,
+            startMs: row.startMs,
+            endMs: row.endMs,
+            text: row.content,
+            lang: row.lang,
+            speaker: row.speaker,
+          ),
+        )
+        .toList();
+  }
+
+  Future<void> replaceTranscriptSegments(
+    String recordingId,
+    List<TranscriptSegmentDraft> segments,
+  ) async {
+    await _database.transaction(() async {
+      await (_database.delete(
+        _database.transcriptSegments,
+      )..where((row) => row.recordingId.equals(recordingId))).go();
+      for (final segment in segments) {
+        await _database
+            .into(_database.transcriptSegments)
+            .insert(
+              db.TranscriptSegmentsCompanion.insert(
+                recordingId: recordingId,
+                idx: segment.index,
+                startMs: segment.startMs,
+                endMs: segment.endMs,
+                content: drift.Value(segment.text),
+                lang: drift.Value(segment.lang),
+                speaker: drift.Value(segment.speaker),
+              ),
+            );
+      }
+    });
+  }
+
+  Future<void> updateTranscriptSegment({
+    required int id,
+    required String text,
+    required String lang,
+  }) async {
+    await (_database.update(
+      _database.transcriptSegments,
+    )..where((row) => row.id.equals(id))).write(
+      db.TranscriptSegmentsCompanion(
+        content: drift.Value(text),
+        lang: drift.Value(lang),
+      ),
+    );
+  }
+
+  Future<void> deleteTranscriptSegments(String recordingId) async {
+    await (_database.delete(
+      _database.transcriptSegments,
+    )..where((row) => row.recordingId.equals(recordingId))).go();
+  }
 }

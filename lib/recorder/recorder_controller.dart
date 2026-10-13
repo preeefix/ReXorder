@@ -12,6 +12,8 @@ import '../audio/audio_math.dart';
 import '../audio/wav_writer.dart';
 import '../data/providers.dart';
 import '../domain/recording_repository.dart';
+import '../domain/recording.dart';
+import '../processing/transcription_queue.dart';
 import 'recording_service_channel.dart';
 
 enum RecorderPhase { idle, recording, paused, saving }
@@ -181,6 +183,18 @@ class RecorderController extends Notifier<RecorderState> {
       await _recorder!.dispose();
       _reset();
       state = RecorderState(savedRecordingId: id);
+      if (await TranscriptionPreferences.autoTranscribe()) {
+        final language = await TranscriptionPreferences.defaultLanguage();
+        await ref
+            .read(transcriptionQueueProvider)
+            .enqueue(
+              id,
+              language: LanguageHint.values.firstWhere(
+                (value) => value.name == language,
+                orElse: () => LanguageHint.auto,
+              ),
+            );
+      }
       return id;
     } catch (error) {
       state = state.copyWith(error: error.toString());

@@ -124,4 +124,31 @@ void main() {
 
     expect(await repository.getRecording('missing'), isNull);
   });
+
+  test('deletes a zero-byte PCM and its recording row', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'rexorder-recovery-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final database = AppDatabase.memory();
+    addTearDown(database.close);
+    final recordingsDirectory = Directory('${directory.path}/recordings')
+      ..createSync();
+    final repository = RecordingRepository(database, recordingsDirectory);
+    await repository.createRecording(id: 'empty');
+    final pcm = File('${recordingsDirectory.path}/empty.pcm')
+      ..writeAsBytesSync([]);
+
+    await recoverOrphanedRecordings(
+      recordingsDirectory: recordingsDirectory,
+      repository: repository,
+    );
+
+    expect(await pcm.exists(), isFalse);
+    expect(await repository.getRecording('empty'), isNull);
+    expect(
+      await File('${recordingsDirectory.path}/empty.wav').exists(),
+      isFalse,
+    );
+  });
 }

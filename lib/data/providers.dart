@@ -11,3 +11,7 @@ final appDatabaseProvider = Provider<AppDatabase>(
 final recordingsDirectoryProvider = Provider<Directory>(
   (ref) => throw UnimplementedError('Recordings directory must be overridden'),
 );
+
+final modelsDirectoryProvider = Provider<Directory>(
+  (ref) => throw UnimplementedError('Models directory must be overridden'),
+);

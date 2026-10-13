@@ -4,6 +4,10 @@ part 'recording.freezed.dart';
 
 enum RecordingStatus { recording, ready }
 
+enum TranscriptionStatus { none, queued, running, done, failed }
+
+enum LanguageHint { auto, en, ja }
+
 @freezed
 abstract class Recording with _$Recording {
   const factory Recording({
@@ -14,5 +18,9 @@ abstract class Recording with _$Recording {
     required String fileName,
     required int sampleRate,
     required RecordingStatus status,
+    @Default(TranscriptionStatus.none) TranscriptionStatus transcriptionStatus,
+    @Default(LanguageHint.auto) LanguageHint languageHint,
+    String? asrModelId,
+    String? transcriptionError,
   }) = _Recording;
 }

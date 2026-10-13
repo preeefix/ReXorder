@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rexorder/data/database.dart';
 import 'package:rexorder/domain/recording_repository.dart';
+import 'package:rexorder/domain/transcript_segment.dart';
 
 void main() {
   test(
@@ -37,4 +38,20 @@ void main() {
       expect((await repository.listRecordings()).single.id, 'older');
     },
   );
+
+  test('deleting a recording also deletes its transcript segments', () async {
+    final directory = await Directory.systemTemp.createTemp('rexorder-repo-');
+    addTearDown(() => directory.delete(recursive: true));
+    final database = AppDatabase.memory();
+    addTearDown(database.close);
+    final repository = RecordingRepository(database, directory);
+    final recording = await repository.createRecording(id: 'with-transcript');
+    await repository.replaceTranscriptSegments(recording.id, const [
+      TranscriptSegmentDraft(index: 0, startMs: 0, endMs: 1000, text: 'hello'),
+    ]);
+
+    await repository.delete(recording.id);
+
+    expect(await repository.listTranscriptSegments(recording.id), isEmpty);
+  });
 }
