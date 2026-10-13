@@ -1,0 +1,13 @@
+import 'dart:io';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'database.dart';
+
+final appDatabaseProvider = Provider<AppDatabase>(
+  (ref) => throw UnimplementedError('AppDatabase must be overridden'),
+);
+
+final recordingsDirectoryProvider = Provider<Directory>(
+  (ref) => throw UnimplementedError('Recordings directory must be overridden'),
+);
