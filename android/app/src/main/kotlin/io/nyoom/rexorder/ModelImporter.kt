@@ -22,11 +22,24 @@ class ModelImporter(
     fun importModel(
         uri: Uri,
         modelId: String,
+        displayName: String,
+        requiredFiles: List<String>,
         kind: String,
+        targetFileName: String?,
         onProgress: (Long, Long) -> Unit,
     ): String {
         requireValidModelId(modelId)
+        require(displayName.isNotBlank()) { "Missing model display name." }
         require(kind == "tar.bz2" || kind == "file") { "Unsupported archive type." }
+        require(requiredFiles.isNotEmpty()) { "The model has no required files." }
+        requiredFiles.forEach(::requireValidRelativePath)
+        if (kind == "file") {
+            require(targetFileName != null) { "Missing target model file name." }
+            requireValidRelativePath(targetFileName)
+            require(targetFileName in requiredFiles) {
+                "The target file is not in the required model files."
+            }
+        }
 
         val modelRoot = File(filesDirectory, "models")
         if (!modelRoot.exists() && !modelRoot.mkdirs()) {
@@ -69,21 +82,17 @@ class ModelImporter(
             }
             try {
                 when (kind) {
-                    "tar.bz2" -> extractArchive(temporaryFile, partialDirectory)
+                    "tar.bz2" ->
+                        extractArchive(temporaryFile, partialDirectory, requiredFiles)
                     "file" -> {
-                        if (modelId != "silero-vad") {
-                            throw IllegalArgumentException(
-                                "Only the VAD model accepts a plain file.",
-                            )
-                        }
                         if (temporaryFile.length() == 0L) {
-                            throw IOException("The selected VAD model file is empty.")
+                            throw IOException("The selected model file is empty.")
                         }
+                        val output = File(partialDirectory, targetFileName!!)
+                        output.parentFile?.mkdirs()
                         FileInputStream(temporaryFile).use { input ->
-                            FileOutputStream(
-                                File(partialDirectory, "silero_vad.onnx"),
-                            ).use { output ->
-                                input.copyTo(output, COPY_BUFFER_SIZE)
+                            FileOutputStream(output).use { out ->
+                                input.copyTo(out, COPY_BUFFER_SIZE)
                             }
                         }
                     }
@@ -91,7 +100,7 @@ class ModelImporter(
                 if (partialDirectory.walkTopDown().none { it.isFile }) {
                     throw IOException("The archive did not contain supported model files.")
                 }
-                val missingFiles = requiredFiles(modelId).filterNot {
+                val missingFiles = requiredFiles.filterNot {
                     File(partialDirectory, it).isFile
                 }
                 if (missingFiles.isNotEmpty()) {
@@ -102,7 +111,7 @@ class ModelImporter(
             } catch (error: Exception) {
                 if (kind == "tar.bz2") {
                     throw IOException(
-                        "The selected file is not a valid ${modelDisplayName(modelId)} " +
+                        "The selected file is not a valid $displayName " +
                             "archive: ${error.message ?: "Unable to decode the archive."}",
                         error,
                     )
@@ -147,7 +156,11 @@ class ModelImporter(
         return File(File(filesDirectory, "models"), modelId).deleteRecursively()
     }
 
-    private fun extractArchive(archive: File, destination: File) {
+    private fun extractArchive(
+        archive: File,
+        destination: File,
+        requiredFiles: List<String>,
+    ) {
         BufferedInputStream(FileInputStream(archive)).use { input ->
             BZip2CompressorInputStream(input, true).use { compressed ->
                 TarArchiveInputStream(compressed).use { tar ->
@@ -162,13 +175,14 @@ class ModelImporter(
                         if (pathParts.isEmpty() || pathParts.any { it == ".." }) continue
                         val fileName = pathParts.last()
                         val outputPath = when {
-                            fileName.endsWith("encoder.int8.onnx") -> "encoder.int8.onnx"
-                            fileName.endsWith("decoder.int8.onnx") -> "decoder.int8.onnx"
-                            fileName == "model.int8.onnx" -> fileName
-                            fileName.endsWith("tokens.txt") -> "tokens.txt"
-                            fileName.endsWith(".wav") && "test_wavs" in pathParts ->
+                            fileName.endsWith(".wav") &&
+                                pathParts.getOrNull(pathParts.lastIndex - 1) == "test_wavs" ->
                                 "test_wavs/$fileName"
-                            else -> null
+                            else -> requiredFiles.firstOrNull { requiredFile ->
+                                val requiredFileName = requiredFile.substringAfterLast('/')
+                                fileName == requiredFileName ||
+                                    fileName.endsWith("-$requiredFileName")
+                            }
                         } ?: continue
                         val output = File(destination, outputPath)
                         output.parentFile?.mkdirs()
@@ -205,19 +219,12 @@ class ModelImporter(
         require(modelId.matches(Regex("[a-z0-9-]+"))) { "Invalid model id." }
     }
 
-    private fun modelDisplayName(modelId: String): String = when (modelId) {
-        "whisper-small" -> "Whisper Small"
-        "whisper-turbo" -> "Whisper Turbo"
-        "sense-voice" -> "SenseVoice"
-        else -> modelId
-    }
-
-    private fun requiredFiles(modelId: String): List<String> = when (modelId) {
-        "silero-vad" -> listOf("silero_vad.onnx")
-        "whisper-small", "whisper-turbo" ->
-            listOf("encoder.int8.onnx", "decoder.int8.onnx", "tokens.txt")
-        "sense-voice" -> listOf("model.int8.onnx", "tokens.txt")
-        else -> throw IllegalArgumentException("Unknown model id.")
+    private fun requireValidRelativePath(path: String) {
+        require(
+            path.isNotBlank() && !path.startsWith('/') &&
+                path.split('/').all { it.isNotBlank() && it != "." && it != ".." } &&
+                '\\' !in path,
+        ) { "Invalid model file path." }
     }
 
     companion object {

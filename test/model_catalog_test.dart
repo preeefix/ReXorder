@@ -12,4 +12,18 @@ void main() {
       expect(model.files, isNotEmpty);
     }
   });
+
+  test('speaker models use their expected import types and files', () {
+    final segmentation = modelById('pyannote-segmentation')!;
+    final embedding = modelById('campplus-zh-en')!;
+
+    expect(segmentation.type, ModelType.segmentation);
+    expect(segmentation.importKind, 'tar.bz2');
+    expect(segmentation.files, ['model.onnx']);
+    expect(segmentation.sizeBytes, 6958444);
+    expect(embedding.type, ModelType.embedding);
+    expect(embedding.importKind, 'file');
+    expect(embedding.files, ['embedding.onnx']);
+    expect(embedding.sizeBytes, 28281164);
+  });
 }

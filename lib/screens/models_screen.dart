@@ -22,6 +22,10 @@ class ModelsScreen extends ConsumerWidget {
             'ReXorder never downloads model files. Download them from the '
             'official links, then import them from local storage.',
           ),
+          const SizedBox(height: 8),
+          const Text(
+            'Speaker detection is optional. Import both speaker models to enable it.',
+          ),
           const SizedBox(height: 12),
           for (final model in modelCatalog)
             _ModelCard(

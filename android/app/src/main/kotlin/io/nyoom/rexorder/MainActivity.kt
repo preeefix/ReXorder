@@ -53,8 +53,14 @@ class MainActivity : FlutterActivity() {
                 "importModel" -> {
                     val uri = call.argument<String>("uri")?.let { Uri.parse(it) }
                     val modelId = call.argument<String>("modelId")
+                    val displayName = call.argument<String>("displayName")
                     val kind = call.argument<String>("kind")
-                    if (uri == null || modelId == null || kind == null) {
+                    val files = call.argument<List<String>>("files")
+                    val targetFileName = call.argument<String>("targetFileName")
+                    if (
+                        uri == null || modelId == null || displayName == null ||
+                        kind == null || files == null
+                    ) {
                         result.error("invalid_arguments", "Missing model import arguments.", null)
                     } else {
                         modelExecutor.execute {
@@ -62,7 +68,10 @@ class MainActivity : FlutterActivity() {
                                 val directory = modelImporter.importModel(
                                     uri,
                                     modelId,
+                                    displayName,
+                                    files,
                                     kind,
+                                    targetFileName,
                                 ) { bytesRead, totalBytes ->
                                     mainHandler.post {
                                         modelProgressSink?.success(
@@ -152,6 +161,7 @@ class MainActivity : FlutterActivity() {
                             call.argument<String>("title") ?: "Transcribing",
                             call.argument<Int>("progress") ?: 0,
                             call.argument<Int>("max") ?: 0,
+                            call.argument<String>("stage") ?: "transcribing",
                         )
                         result.success(null)
                     } catch (error: Exception) {

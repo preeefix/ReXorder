@@ -48,6 +48,7 @@ void main() {
         container.read(modelManagerProvider).installedModelIds,
         contains('silero-vad'),
       );
+      expect(container.read(modelManagerProvider).hasDiarization, isFalse);
 
       client.shouldFail = true;
       await controller.importModel(modelCatalog[1]);
@@ -59,6 +60,12 @@ void main() {
         container.read(modelManagerProvider).message,
         contains('not a valid Whisper Small archive'),
       );
+      client.installed['pyannote-segmentation'] = modelById(
+        'pyannote-segmentation',
+      )!.files;
+      client.installed['campplus-zh-en'] = modelById('campplus-zh-en')!.files;
+      await controller.refresh();
+      expect(container.read(modelManagerProvider).hasDiarization, isTrue);
     },
   );
 }

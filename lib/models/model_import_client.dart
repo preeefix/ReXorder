@@ -48,7 +48,10 @@ class MethodChannelModelImportClient implements ModelImportClient {
     return (await _methods.invokeMethod<String>('importModel', {
       'uri': uri,
       'modelId': model.id,
+      'displayName': model.displayName,
       'kind': model.importKind,
+      'files': model.files,
+      if (model.importKind == 'file') 'targetFileName': model.files.single,
     }))!;
   }
 

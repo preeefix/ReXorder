@@ -1,4 +1,4 @@
-enum ModelType { whisper, sensevoice, vad }
+enum ModelType { whisper, sensevoice, vad, segmentation, embedding }
 
 class CatalogModel {
   const CatalogModel({
@@ -20,7 +20,8 @@ class CatalogModel {
   final List<String> files;
 
   bool get isAsr => type == ModelType.whisper || type == ModelType.sensevoice;
-  String get importKind => type == ModelType.vad ? 'file' : 'tar.bz2';
+  String get importKind =>
+      type == ModelType.vad || type == ModelType.embedding ? 'file' : 'tar.bz2';
 }
 
 const modelCatalog = <CatalogModel>[
@@ -68,6 +69,26 @@ const modelCatalog = <CatalogModel>[
       'test_wavs/ja.wav',
       'test_wavs/en.wav',
     ],
+  ),
+  CatalogModel(
+    id: 'pyannote-segmentation',
+    displayName: 'Speaker segmentation (pyannote 3.0)',
+    type: ModelType.segmentation,
+    url:
+        'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2',
+    fileName: 'sherpa-onnx-pyannote-segmentation-3-0.tar.bz2',
+    sizeBytes: 6958444,
+    files: ['model.onnx'],
+  ),
+  CatalogModel(
+    id: 'campplus-zh-en',
+    displayName: 'Speaker voiceprint (3D-Speaker CAM++)',
+    type: ModelType.embedding,
+    url:
+        'https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx',
+    fileName: '3dspeaker_speech_campplus_sv_zh_en_16k-common_advanced.onnx',
+    sizeBytes: 28281164,
+    files: ['embedding.onnx'],
   ),
 ];
 

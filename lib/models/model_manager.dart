@@ -38,6 +38,9 @@ class ModelManagerState {
   bool get hasAsr => modelCatalog.any(
     (model) => model.isAsr && installedModelIds.contains(model.id),
   );
+  bool get hasDiarization =>
+      installedModelIds.contains('pyannote-segmentation') &&
+      installedModelIds.contains('campplus-zh-en');
 
   ModelManagerState copyWith({
     Map<String, List<String>>? installedFiles,
