@@ -6,6 +6,16 @@ import 'package:rexorder/models/model_import_client.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  test('progress events without a stage default to copying', () {
+    final progress = ModelImportProgress.fromEvent({
+      'modelId': 'silero-vad',
+      'bytesRead': 12,
+      'totalBytes': 34,
+    });
+
+    expect(progress.stage, 'copying');
+  });
+
   test('plain-file imports pass their display name and target files', () async {
     const channel = MethodChannel('rexorder/models');
     final messenger =

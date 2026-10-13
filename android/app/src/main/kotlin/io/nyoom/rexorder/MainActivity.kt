@@ -72,11 +72,12 @@ class MainActivity : FlutterActivity() {
                                     files,
                                     kind,
                                     targetFileName,
-                                ) { bytesRead, totalBytes ->
+                                ) { stage, bytesRead, totalBytes ->
                                     mainHandler.post {
                                         modelProgressSink?.success(
                                             mapOf(
                                                 "modelId" to modelId,
+                                                "stage" to stage,
                                                 "bytesRead" to bytesRead,
                                                 "totalBytes" to totalBytes,
                                             ),

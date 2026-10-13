@@ -7,11 +7,23 @@ class ModelImportProgress {
     required this.modelId,
     required this.bytesRead,
     required this.totalBytes,
+    this.stage = 'copying',
   });
 
   final String modelId;
   final int bytesRead;
   final int totalBytes;
+  final String stage;
+
+  factory ModelImportProgress.fromEvent(Object? event) {
+    final value = event as Map<Object?, Object?>;
+    return ModelImportProgress(
+      modelId: value['modelId']! as String,
+      bytesRead: (value['bytesRead']! as num).toInt(),
+      totalBytes: (value['totalBytes']! as num).toInt(),
+      stage: value['stage'] as String? ?? 'copying',
+    );
+  }
 }
 
 abstract interface class ModelImportClient {
@@ -30,14 +42,7 @@ class MethodChannelModelImportClient implements ModelImportClient {
 
   @override
   Stream<ModelImportProgress> get progress =>
-      _events.receiveBroadcastStream().map((event) {
-        final value = event as Map<Object?, Object?>;
-        return ModelImportProgress(
-          modelId: value['modelId']! as String,
-          bytesRead: (value['bytesRead']! as num).toInt(),
-          totalBytes: (value['totalBytes']! as num).toInt(),
-        );
-      });
+      _events.receiveBroadcastStream().map(ModelImportProgress.fromEvent);
 
   @override
   Future<String?> pickDocument() =>

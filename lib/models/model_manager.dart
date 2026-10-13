@@ -15,6 +15,7 @@ class ModelManagerState {
     this.currentModelId,
     this.bytesRead = 0,
     this.totalBytes = 0,
+    this.importStage = 'copying',
     this.message,
   });
 
@@ -24,6 +25,7 @@ class ModelManagerState {
   final String? currentModelId;
   final int bytesRead;
   final int totalBytes;
+  final String importStage;
   final String? message;
 
   Set<String> get installedModelIds => {
@@ -49,6 +51,7 @@ class ModelManagerState {
     String? currentModelId,
     int? bytesRead,
     int? totalBytes,
+    String? importStage,
     String? message,
     bool clearMessage = false,
     bool clearCurrentModel = false,
@@ -61,6 +64,7 @@ class ModelManagerState {
         : currentModelId ?? this.currentModelId,
     bytesRead: bytesRead ?? this.bytesRead,
     totalBytes: totalBytes ?? this.totalBytes,
+    importStage: importStage ?? this.importStage,
     message: clearMessage ? null : message ?? this.message,
   );
 }
@@ -101,6 +105,7 @@ class ModelManagerController extends Notifier<ModelManagerState> {
       currentModelId: model.id,
       bytesRead: 0,
       totalBytes: model.sizeBytes,
+      importStage: 'copying',
       clearMessage: true,
     );
     try {
@@ -121,6 +126,7 @@ class ModelManagerController extends Notifier<ModelManagerState> {
             totalBytes: progress.totalBytes > 0
                 ? progress.totalBytes
                 : model.sizeBytes,
+            importStage: progress.stage,
           );
         }
       });

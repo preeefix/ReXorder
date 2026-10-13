@@ -11,7 +11,9 @@ import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.FilterInputStream
 import java.io.IOException
+import java.io.InputStream
 import java.util.UUID
 
 class ModelImporter(
@@ -26,7 +28,7 @@ class ModelImporter(
         requiredFiles: List<String>,
         kind: String,
         targetFileName: String?,
-        onProgress: (Long, Long) -> Unit,
+        onProgress: (String, Long, Long) -> Unit,
     ): String {
         requireValidModelId(modelId)
         require(displayName.isNotBlank()) { "Missing model display name." }
@@ -51,6 +53,29 @@ class ModelImporter(
         val backup = File(modelRoot, "$modelId.previous")
         var lastProgressBytes = 0L
         var lastProgressTime = SystemClock.elapsedRealtime()
+        fun resetProgressThrottle() {
+            lastProgressBytes = 0L
+            lastProgressTime = SystemClock.elapsedRealtime()
+        }
+        fun reportProgress(
+            stage: String,
+            bytesRead: Long,
+            totalBytes: Long,
+            force: Boolean = false,
+        ) {
+            val elapsedTime = SystemClock.elapsedRealtime() - lastProgressTime
+            if (
+                force ||
+                (
+                    bytesRead - lastProgressBytes >= PROGRESS_BYTES_INTERVAL &&
+                        elapsedTime >= PROGRESS_TIME_INTERVAL_MS
+                    )
+            ) {
+                onProgress(stage, bytesRead, totalBytes)
+                lastProgressBytes = bytesRead
+                lastProgressTime = SystemClock.elapsedRealtime()
+            }
+        }
         try {
             val expectedLength = queryLength(uri)
             contentResolver.openInputStream(uri)?.use { input ->
@@ -62,28 +87,35 @@ class ModelImporter(
                         if (count < 0) break
                         output.write(buffer, 0, count)
                         bytesRead += count
-                        val elapsedTime = SystemClock.elapsedRealtime() - lastProgressTime
-                        if (
-                            bytesRead - lastProgressBytes >= PROGRESS_BYTES_INTERVAL &&
-                            elapsedTime >= PROGRESS_TIME_INTERVAL_MS
-                        ) {
-                            onProgress(bytesRead, expectedLength)
-                            lastProgressBytes = bytesRead
-                            lastProgressTime = SystemClock.elapsedRealtime()
-                        }
+                        reportProgress("copying", bytesRead, expectedLength)
                     }
-                    onProgress(bytesRead, expectedLength)
+                    reportProgress("copying", bytesRead, expectedLength, force = true)
                 }
             } ?: throw IOException("Unable to open the selected document.")
 
+            resetProgressThrottle()
             partialDirectory.deleteRecursively()
             if (!partialDirectory.mkdirs()) {
                 throw IOException("Unable to create temporary model directory.")
             }
             try {
                 when (kind) {
-                    "tar.bz2" ->
-                        extractArchive(temporaryFile, partialDirectory, requiredFiles)
+                    "tar.bz2" -> {
+                        val archiveLength = temporaryFile.length()
+                        extractArchive(
+                            temporaryFile,
+                            partialDirectory,
+                            requiredFiles,
+                        ) { bytesRead ->
+                            reportProgress("unpacking", bytesRead, archiveLength)
+                        }
+                        reportProgress(
+                            "unpacking",
+                            archiveLength,
+                            archiveLength,
+                            force = true,
+                        )
+                    }
                     "file" -> {
                         if (temporaryFile.length() == 0L) {
                             throw IOException("The selected model file is empty.")
@@ -92,11 +124,30 @@ class ModelImporter(
                         output.parentFile?.mkdirs()
                         FileInputStream(temporaryFile).use { input ->
                             FileOutputStream(output).use { out ->
-                                input.copyTo(out, COPY_BUFFER_SIZE)
+                                val buffer = ByteArray(COPY_BUFFER_SIZE)
+                                var bytesRead = 0L
+                                while (true) {
+                                    val count = input.read(buffer)
+                                    if (count < 0) break
+                                    out.write(buffer, 0, count)
+                                    bytesRead += count
+                                    reportProgress(
+                                        "unpacking",
+                                        bytesRead,
+                                        temporaryFile.length(),
+                                    )
+                                }
+                                reportProgress(
+                                    "unpacking",
+                                    bytesRead,
+                                    temporaryFile.length(),
+                                    force = true,
+                                )
                             }
                         }
                     }
                 }
+                onProgress("installing", 0L, 0L)
                 if (partialDirectory.walkTopDown().none { it.isFile }) {
                     throw IOException("The archive did not contain supported model files.")
                 }
@@ -160,8 +211,13 @@ class ModelImporter(
         archive: File,
         destination: File,
         requiredFiles: List<String>,
+        onCompressedBytesRead: (Long) -> Unit,
     ) {
-        BufferedInputStream(FileInputStream(archive)).use { input ->
+        val countingInput = CountingInputStream(
+            FileInputStream(archive),
+            onCompressedBytesRead,
+        )
+        BufferedInputStream(countingInput).use { input ->
             BZip2CompressorInputStream(input, true).use { compressed ->
                 TarArchiveInputStream(compressed).use { tar ->
                     while (true) {
@@ -225,6 +281,31 @@ class ModelImporter(
                 path.split('/').all { it.isNotBlank() && it != "." && it != ".." } &&
                 '\\' !in path,
         ) { "Invalid model file path." }
+    }
+
+    private class CountingInputStream(
+        input: InputStream,
+        private val onBytesRead: (Long) -> Unit,
+    ) : FilterInputStream(input) {
+        private var bytesRead = 0L
+
+        override fun read(): Int {
+            val value = super.read()
+            if (value >= 0) {
+                bytesRead++
+                onBytesRead(bytesRead)
+            }
+            return value
+        }
+
+        override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            val count = super.read(buffer, offset, length)
+            if (count > 0) {
+                bytesRead += count
+                onBytesRead(bytesRead)
+            }
+            return count
+        }
     }
 
     companion object {

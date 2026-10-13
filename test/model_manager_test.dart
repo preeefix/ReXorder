@@ -68,6 +68,54 @@ void main() {
       expect(container.read(modelManagerProvider).hasDiarization, isTrue);
     },
   );
+
+  test(
+    'model import state follows copying, unpacking, and installing',
+    () async {
+      final client = _FakeModelImportClient();
+      final container = ProviderContainer(
+        overrides: [modelImportClientProvider.overrideWithValue(client)],
+      );
+      addTearDown(container.dispose);
+      container.listen(modelManagerProvider, (previous, next) {});
+      final controller = container.read(modelManagerProvider.notifier);
+      await controller.refresh();
+
+      final import = controller.importModel(modelCatalog.first);
+      await Future<void>.delayed(Duration.zero);
+
+      const progress = [
+        ModelImportProgress(
+          modelId: 'silero-vad',
+          stage: 'copying',
+          bytesRead: 100,
+          totalBytes: 1000,
+        ),
+        ModelImportProgress(
+          modelId: 'silero-vad',
+          stage: 'unpacking',
+          bytesRead: 420,
+          totalBytes: 1000,
+        ),
+        ModelImportProgress(
+          modelId: 'silero-vad',
+          stage: 'installing',
+          bytesRead: 0,
+          totalBytes: 0,
+        ),
+      ];
+      for (final event in progress) {
+        client.progressController.add(event);
+        await Future<void>.delayed(Duration.zero);
+        final state = container.read(modelManagerProvider);
+        expect(state.importStage, event.stage);
+        expect(state.bytesRead, event.bytesRead);
+      }
+
+      client.importCompleter.complete('/models/silero-vad');
+      await import;
+    },
+  );
 }
 
 class _FakeModelImportClient implements ModelImportClient {

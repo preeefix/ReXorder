@@ -36,6 +36,7 @@ class ModelsScreen extends ConsumerWidget {
                   state.phase == ModelImportPhase.importing,
               bytesRead: state.bytesRead,
               totalBytes: state.totalBytes,
+              stage: state.importStage,
               busy:
                   state.phase == ModelImportPhase.picking ||
                   state.phase == ModelImportPhase.importing,
@@ -65,6 +66,7 @@ class _ModelCard extends ConsumerWidget {
     required this.progress,
     required this.bytesRead,
     required this.totalBytes,
+    required this.stage,
     required this.busy,
   });
 
@@ -73,11 +75,25 @@ class _ModelCard extends ConsumerWidget {
   final bool progress;
   final int bytesRead;
   final int totalBytes;
+  final String stage;
   final bool busy;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final controller = ref.read(modelManagerProvider.notifier);
+    final progressValue = totalBytes > 0
+        ? (bytesRead / totalBytes).clamp(0.0, 1.0)
+        : null;
+    final progressLabel = switch (stage) {
+      'unpacking' =>
+        totalBytes > 0
+            ? 'Unpacking ${(progressValue! * 100).round()}%'
+            : 'Unpacking…',
+      'installing' => 'Installing…',
+      _ =>
+        'Copying ${formatModelSize(bytesRead)} / '
+            '${formatModelSize(totalBytes)}',
+    };
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: Padding(
@@ -118,12 +134,10 @@ class _ModelCard extends ConsumerWidget {
             if (progress) ...[
               const SizedBox(height: 12),
               LinearProgressIndicator(
-                value: totalBytes > 0 ? bytesRead / totalBytes : null,
+                value: stage == 'installing' ? null : progressValue,
               ),
               const SizedBox(height: 4),
-              Text(
-                '${formatModelSize(bytesRead)} / ${formatModelSize(totalBytes)}',
-              ),
+              Text(progressLabel),
             ],
             Wrap(
               spacing: 4,
