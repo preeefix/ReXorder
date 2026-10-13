@@ -116,7 +116,12 @@ bool _isCjk(int rune) =>
     rune >= 0x31f0 && rune <= 0x31ff ||
     rune >= 0x3400 && rune <= 0x4dbf ||
     rune >= 0x4e00 && rune <= 0x9fff ||
-    rune >= 0x20000 && rune <= 0x2fa1f;
+    rune >= 0x20000 && rune <= 0x2fa1f ||
+    rune >= 0xac00 && rune <= 0xd7af ||
+    rune >= 0x1100 && rune <= 0x11ff ||
+    rune >= 0x3130 && rune <= 0x318f ||
+    rune >= 0xa960 && rune <= 0xa97f ||
+    rune >= 0xd7b0 && rune <= 0xd7ff;
 
 bool _significant(String value) {
   final runes = value.runes.toList();
@@ -137,19 +142,29 @@ String _canonical(String value) => value.replaceAllMapped(
 List<DiffSpan> _spans(String text, List<_Token> tokens, Set<int> matched) {
   final spans = <DiffSpan>[];
   var offset = 0;
+  void addSpan(String value, {required bool changed}) {
+    if (value.isEmpty) return;
+    if (spans.isNotEmpty && spans.last.changed == changed) {
+      final previous = spans.removeLast();
+      spans.add(DiffSpan('${previous.text}$value', changed: changed));
+    } else {
+      spans.add(DiffSpan(value, changed: changed));
+    }
+  }
+
   for (var index = 0; index < tokens.length; index++) {
     final token = tokens[index];
     if (token.start > offset) {
-      spans.add(DiffSpan(text.substring(offset, token.start)));
+      addSpan(text.substring(offset, token.start), changed: false);
     }
-    spans.add(
-      DiffSpan(
-        token.text,
-        changed: _significant(token.text) && !matched.contains(index),
-      ),
+    addSpan(
+      text.substring(token.start, token.end),
+      changed: _significant(token.text) && !matched.contains(index),
     );
     offset = token.end;
   }
-  if (offset < text.length) spans.add(DiffSpan(text.substring(offset)));
+  if (offset < text.length) {
+    addSpan(text.substring(offset), changed: false);
+  }
   return spans;
 }

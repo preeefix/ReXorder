@@ -8,6 +8,7 @@ import '../compare/text_diff.dart';
 import '../domain/recording.dart';
 import '../domain/transcript_segment.dart';
 import '../domain/transcription_run.dart';
+import '../domain/transcription_run_display.dart';
 import '../models/model_catalog.dart';
 
 class CompareScreen extends ConsumerStatefulWidget {
@@ -235,8 +236,14 @@ class _ComparisonBody extends ConsumerWidget {
               _modelName(run),
               style: Theme.of(context).textTheme.titleSmall,
             ),
-            Text(run.languageHint.name),
-            Text(speakers == 0 ? 'No speakers' : '$speakers speakers'),
+            Text(runLanguageLabel(run.languageHint)),
+            Text(
+              runSpeakerCountLabel(
+                detected: speakers,
+                hint: run.speakerCountHint,
+                diarized: run.diarized,
+              ),
+            ),
             Text('${_time(run.processingMs)} · RTF $rtf'),
             Text('${segments.length} segments'),
           ],
