@@ -103,9 +103,7 @@ class RecordingRepository {
           (row) => SearchHit(
             recordingId: row.read<String>('recording_id'),
             recordingTitle: row.read<String>('recording_title'),
-            createdAt: DateTime.fromMillisecondsSinceEpoch(
-              row.read<int>('created_at'),
-            ),
+            createdAt: row.read<DateTime>('created_at'),
             segmentStartMs: row.readNullable<int>('segment_start_ms'),
             text: row.readNullable<String>('hit_text'),
           ),

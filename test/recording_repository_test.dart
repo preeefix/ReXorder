@@ -164,6 +164,7 @@ void main() {
       'older-search',
     ]);
     expect(english.map((hit) => hit.segmentStartMs), [1000, 3000, 2000]);
+    expect(english.first.createdAt, newer.createdAt);
     expect((await repository.search('弁当')).single.text, '弁当制の案内');
     final titleHits = await repository.search('title needle');
     expect(titleHits, hasLength(1));
