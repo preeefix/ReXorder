@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rexorder/asr/asr_engine.dart';
+import 'package:rexorder/asr/diarizer.dart';
 import 'package:rexorder/asr/vad_segmenter.dart';
 import 'package:rexorder/data/database.dart' hide Recording;
 import 'package:rexorder/domain/recording.dart';
@@ -91,6 +92,11 @@ void main() {
       ),
       TranscriptSegmentDraft(index: 1, startMs: 500, endMs: 1000),
     ]);
+    await fixture.repository.setSpeakerName(
+      recordingId: recording.id,
+      speaker: 0,
+      name: 'Alice',
+    );
     await fixture.repository.updateTranscription(
       id: recording.id,
       status: TranscriptionStatus.queued,
@@ -123,6 +129,11 @@ void main() {
     final fixture = await _Fixture.create();
     addTearDown(fixture.dispose);
     final recording = await fixture.recording('reset');
+    await fixture.repository.setSpeakerName(
+      recordingId: recording.id,
+      speaker: 0,
+      name: 'Alice',
+    );
     await fixture.repository.replaceTranscriptSegments(recording.id, const [
       TranscriptSegmentDraft(
         index: 0,
@@ -147,10 +158,12 @@ void main() {
       recording.id,
     );
     expect(processor.segmentCalls, 1);
+    expect(processor.diarizeCalls, 0);
     expect(segments, hasLength(1));
     expect(segments.single.startMs, 10);
     expect(segments.single.endMs, 20);
     expect(segments.single.text, 'recognized');
+    expect(await fixture.repository.speakerNames(recording.id), isEmpty);
   });
 
   test('failed job records its error and queue continues', () async {
@@ -188,7 +201,7 @@ void main() {
     final queue = fixture.queue(
       _FakeProcessor(),
       startService: (_) async => throw StateError('service start failed'),
-      updateService: (_, _, _) async =>
+      updateService: (_, _, _, _) async =>
           throw StateError('service update failed'),
       stopService: () async => throw StateError('service stop failed'),
     );
@@ -219,6 +232,133 @@ void main() {
         recording.id,
       ))!.transcriptionStatus,
       TranscriptionStatus.queued,
+    );
+  });
+
+  test('automatic speaker detection assigns speaker IDs', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.recording('diarization-auto');
+    await fixture.repository.updateTranscription(
+      id: recording.id,
+      status: TranscriptionStatus.queued,
+    );
+    final processor = _FakeProcessor()
+      ..turns = [const SpeakerTurn(startSample: 0, endSample: 160, speaker: 5)];
+    final queue = fixture.queue(
+      processor,
+      installedModels: _installedWithDiarization(),
+    );
+
+    await queue.processQueue();
+
+    final segments = await fixture.repository.listTranscriptSegments(
+      recording.id,
+    );
+    expect(processor.diarizeCalls, 1);
+    expect(processor.speakerCountHints, [null]);
+    expect(segments.single.speaker, 0);
+  });
+
+  test('speaker count one skips diarization', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.recording('diarization-single');
+    final processor = _FakeProcessor();
+    final queue = fixture.queue(
+      processor,
+      installedModels: _installedWithDiarization(),
+    );
+
+    await queue.enqueue(recording.id, speakerCount: 1);
+    await queue.processQueue();
+
+    expect(processor.diarizeCalls, 0);
+    expect(
+      (await fixture.repository.getRecording(recording.id))!.speakerCountHint,
+      1,
+    );
+    expect(
+      (await fixture.repository.listTranscriptSegments(
+        recording.id,
+      )).single.speaker,
+      isNull,
+    );
+  });
+
+  test('missing speaker models skip diarization', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.recording('diarization-missing-models');
+    await fixture.repository.updateTranscription(
+      id: recording.id,
+      status: TranscriptionStatus.queued,
+    );
+    final processor = _FakeProcessor();
+    final queue = fixture.queue(processor);
+
+    await queue.processQueue();
+
+    expect(processor.diarizeCalls, 0);
+    expect(
+      (await fixture.repository.listTranscriptSegments(
+        recording.id,
+      )).single.speaker,
+      isNull,
+    );
+  });
+
+  test('persisted segments resume without diarization', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.recording('diarization-resume');
+    await fixture.repository.replaceTranscriptSegments(recording.id, const [
+      TranscriptSegmentDraft(index: 0, startMs: 0, endMs: 10, speaker: 0),
+    ]);
+    await fixture.repository.updateTranscription(
+      id: recording.id,
+      status: TranscriptionStatus.queued,
+    );
+    final processor = _FakeProcessor()..failDiarization = true;
+    final queue = fixture.queue(
+      processor,
+      installedModels: _installedWithDiarization(),
+    );
+
+    await queue.processQueue();
+
+    expect(processor.segmentCalls, 0);
+    expect(processor.diarizeCalls, 0);
+    expect(
+      (await fixture.repository.getRecording(
+        recording.id,
+      ))!.transcriptionStatus,
+      TranscriptionStatus.done,
+    );
+  });
+
+  test('diarization failure marks the transcription failed', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.recording('diarization-failure');
+    await fixture.repository.updateTranscription(
+      id: recording.id,
+      status: TranscriptionStatus.queued,
+    );
+    final processor = _FakeProcessor()..failDiarization = true;
+    final queue = fixture.queue(
+      processor,
+      installedModels: _installedWithDiarization(),
+    );
+
+    await queue.processQueue();
+
+    expect(processor.diarizeCalls, 1);
+    expect(
+      (await fixture.repository.getRecording(
+        recording.id,
+      ))!.transcriptionStatus,
+      TranscriptionStatus.failed,
     );
   });
 }
@@ -278,7 +418,7 @@ class _Fixture {
   TranscriptionQueue queue(
     _FakeProcessor processor, {
     Future<void> Function(String)? startService,
-    Future<void> Function(String, int, int)? updateService,
+    Future<void> Function(String, int, int, String)? updateService,
     Future<void> Function()? stopService,
     Map<String, List<String>>? installedModels,
   }) => TranscriptionQueue(
@@ -295,7 +435,7 @@ class _Fixture {
     ),
     processor: processor,
     startService: startService ?? (_) async {},
-    updateService: updateService ?? (_, _, _) async {},
+    updateService: updateService ?? (_, _, _, _) async {},
     stopService: stopService ?? () async {},
   );
 
@@ -333,6 +473,10 @@ class _FakeProcessor implements TranscriptionProcessor {
   List<SpeechSampleRange> ranges = [const SpeechSampleRange(0, 160)];
   int segmentCalls = 0;
   bool failSegmentation = false;
+  bool failDiarization = false;
+  int diarizeCalls = 0;
+  List<int?> speakerCountHints = [];
+  List<SpeakerTurn> turns = [];
 
   @override
   Future<void> closeModel() async {}
@@ -356,6 +500,21 @@ class _FakeProcessor implements TranscriptionProcessor {
   }
 
   @override
+  Future<List<SpeakerTurn>> diarize(
+    File wavFile, {
+    required String segmentationModelPath,
+    required String embeddingModelPath,
+    required int? speakerCountHint,
+    required void Function(int done, int total) onProgress,
+  }) async {
+    diarizeCalls++;
+    speakerCountHints.add(speakerCountHint);
+    if (failDiarization) throw StateError('synthetic diarization failure');
+    onProgress(1, 1);
+    return turns;
+  }
+
+  @override
   Future<AsrTranscript> transcribe({
     required File wavFile,
     required int startSample,
@@ -373,4 +532,11 @@ Map<String, List<String>> _installedWhisperAndSenseVoice() => {
   'silero-vad': ['silero_vad.onnx'],
   'whisper-small': modelById('whisper-small')!.files,
   'sense-voice': modelById('sense-voice')!.files,
+};
+
+Map<String, List<String>> _installedWithDiarization() => {
+  'silero-vad': ['silero_vad.onnx'],
+  'whisper-small': modelById('whisper-small')!.files,
+  'pyannote-segmentation': modelById('pyannote-segmentation')!.files,
+  'campplus-zh-en': modelById('campplus-zh-en')!.files,
 };

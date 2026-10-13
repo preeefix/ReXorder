@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../asr/speaker_split.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -21,7 +23,7 @@ class TranscriptionQueue {
     ModelImportClient? modelClient,
     this._processor,
     Future<void> Function(String)? startService,
-    Future<void> Function(String, int, int)? updateService,
+    Future<void> Function(String, int, int, String)? updateService,
     Future<void> Function()? stopService,
   }) : _modelClient = modelClient ?? const MethodChannelModelImportClient(),
        _startService = startService ?? ProcessingServiceChannel.start,
@@ -35,8 +37,9 @@ class TranscriptionQueue {
   TranscriptionProcessor? _processor;
   TranscriptionWorker? _worker;
   final Future<void> Function(String) _startService;
-  final Future<void> Function(String, int, int) _updateService;
+  final Future<void> Function(String, int, int, String) _updateService;
   final Future<void> Function() _stopService;
+  final ValueNotifier<String?> stage = ValueNotifier(null);
   Future<void>? _processFuture;
 
   Future<void> recoverRunningJobs() =>
@@ -46,16 +49,19 @@ class TranscriptionQueue {
     String recordingId, {
     String? modelId,
     LanguageHint language = LanguageHint.auto,
+    int? speakerCount,
     bool retranscribe = false,
   }) async {
     if (retranscribe) {
       await repository.deleteTranscriptSegments(recordingId);
+      await repository.clearSpeakerNames(recordingId);
     }
     await repository.updateTranscription(
       id: recordingId,
       status: TranscriptionStatus.queued,
       modelId: modelId,
       languageHint: language,
+      speakerCountHint: speakerCount,
     );
     unawaited(processQueue());
   }
@@ -86,6 +92,15 @@ class TranscriptionQueue {
         installedAsr.map((model) => model.id),
       );
       if (!vad.files.every(vadFiles.contains) || preferredAsr == null) return;
+      final diarizationInstalled =
+          [
+            modelById('pyannote-segmentation')!,
+            modelById('campplus-zh-en')!,
+          ].every(
+            (model) => model.files.every(
+              (file) => installed[model.id]?.contains(file) ?? false,
+            ),
+          );
       final recording = queued.first;
       final requestedModel = modelById(recording.asrModelId ?? '');
       final model =
@@ -93,14 +108,19 @@ class TranscriptionQueue {
               installedAsr.any((item) => item.id == requestedModel.id)
           ? requestedModel
           : preferredAsr;
-      await _processRecording(recording, model);
+      await _processRecording(
+        recording,
+        model,
+        diarizationInstalled: diarizationInstalled,
+      );
     }
   }
 
   Future<void> _processRecording(
     Recording recording,
-    CatalogModel model,
-  ) async {
+    CatalogModel model, {
+    required bool diarizationInstalled,
+  }) async {
     final wavFile = File(p.join(recordingsDirectory.path, recording.fileName));
     final vadFile = File(
       p.join(modelsDirectory.path, 'silero-vad', 'silero_vad.onnx'),
@@ -110,6 +130,7 @@ class TranscriptionQueue {
         id: recording.id,
         status: TranscriptionStatus.failed,
         modelId: model.id,
+        speakerCountHint: recording.speakerCountHint,
         error: 'Recording or VAD model file is missing.',
       );
       return;
@@ -119,6 +140,7 @@ class TranscriptionQueue {
       status: TranscriptionStatus.running,
       modelId: model.id,
       languageHint: recording.languageHint,
+      speakerCountHint: recording.speakerCountHint,
     );
     try {
       await _startServiceBestEffort(recording.title);
@@ -132,16 +154,52 @@ class TranscriptionQueue {
       var segments = await repository.listTranscriptSegments(recording.id);
       if (segments.isEmpty) {
         final ranges = await processor.segment(wavFile, vadFile.path);
-        await repository.replaceTranscriptSegments(recording.id, [
-          for (var index = 0; index < ranges.length; index++)
-            TranscriptSegmentDraft(
-              index: index,
-              startMs: ranges[index].startSample * 1000 ~/ 16000,
-              endMs: ranges[index].endSample * 1000 ~/ 16000,
+        List<TranscriptSegmentDraft> drafts;
+        if (diarizationInstalled && recording.speakerCountHint != 1) {
+          final segmentation = modelById('pyannote-segmentation')!;
+          final embedding = modelById('campplus-zh-en')!;
+          stage.value = 'speakers';
+          final turns = await processor.diarize(
+            wavFile,
+            segmentationModelPath: p.join(
+              modelsDirectory.path,
+              segmentation.id,
+              segmentation.files.single,
             ),
-        ]);
+            embeddingModelPath: p.join(
+              modelsDirectory.path,
+              embedding.id,
+              embedding.files.single,
+            ),
+            speakerCountHint: recording.speakerCountHint,
+            onProgress: (done, total) => unawaited(
+              _updateServiceBestEffort(
+                recording.title,
+                done,
+                total,
+                'speakers',
+              ),
+            ),
+          );
+          final pieces = splitBySpeaker(ranges, turns);
+          drafts = [
+            for (var index = 0; index < pieces.length; index++)
+              _speakerDraft(index, pieces[index]),
+          ];
+        } else {
+          drafts = [
+            for (var index = 0; index < ranges.length; index++)
+              TranscriptSegmentDraft(
+                index: index,
+                startMs: ranges[index].startSample * 1000 ~/ 16000,
+                endMs: ranges[index].endSample * 1000 ~/ 16000,
+              ),
+          ];
+        }
+        await repository.replaceTranscriptSegments(recording.id, drafts);
         segments = await repository.listTranscriptSegments(recording.id);
       }
+      stage.value = 'transcribing';
       await processor.openModel(
         model: model,
         language: recording.languageHint.name,
@@ -151,6 +209,7 @@ class TranscriptionQueue {
         recording.title,
         completed,
         segments.length,
+        'transcribing',
       );
       for (final segment in segments) {
         if (segment.text != null) continue;
@@ -169,6 +228,7 @@ class TranscriptionQueue {
           recording.title,
           completed,
           segments.length,
+          'transcribing',
         );
       }
       await processor.closeModel();
@@ -177,6 +237,7 @@ class TranscriptionQueue {
         status: TranscriptionStatus.done,
         modelId: model.id,
         languageHint: recording.languageHint,
+        speakerCountHint: recording.speakerCountHint,
       );
     } catch (error) {
       try {
@@ -189,11 +250,21 @@ class TranscriptionQueue {
         status: TranscriptionStatus.failed,
         modelId: model.id,
         error: error.toString(),
+        speakerCountHint: recording.speakerCountHint,
       );
     } finally {
+      stage.value = null;
       await _stopServiceBestEffort();
     }
   }
+
+  TranscriptSegmentDraft _speakerDraft(int index, SpeakerPiece piece) =>
+      TranscriptSegmentDraft(
+        index: index,
+        startMs: piece.startSample * 1000 ~/ 16000,
+        endMs: piece.endSample * 1000 ~/ 16000,
+        speaker: piece.speaker,
+      );
 
   Future<void> _startServiceBestEffort(String title) async {
     try {
@@ -205,9 +276,10 @@ class TranscriptionQueue {
     String title,
     int progress,
     int max,
+    String stage,
   ) async {
     try {
-      await _updateService(title, progress, max);
+      await _updateService(title, progress, max, stage);
     } catch (_) {}
   }
 

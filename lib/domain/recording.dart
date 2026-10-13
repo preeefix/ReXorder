@@ -22,5 +22,6 @@ abstract class Recording with _$Recording {
     @Default(LanguageHint.auto) LanguageHint languageHint,
     String? asrModelId,
     String? transcriptionError,
+    int? speakerCountHint,
   }) = _Recording;
 }

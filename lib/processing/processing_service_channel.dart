@@ -8,12 +8,17 @@ class ProcessingServiceChannel {
   static Future<void> start(String title) =>
       _channel.invokeMethod<void>('start', {'title': title});
 
-  static Future<void> update(String title, int progress, int max) =>
-      _channel.invokeMethod<void>('update', {
-        'title': title,
-        'progress': progress,
-        'max': max,
-      });
+  static Future<void> update(
+    String title,
+    int progress,
+    int max,
+    String stage,
+  ) => _channel.invokeMethod<void>('update', {
+    'title': title,
+    'progress': progress,
+    'max': max,
+    'stage': stage,
+  });
 
   static Future<void> stop() => _channel.invokeMethod<void>('stop');
 }

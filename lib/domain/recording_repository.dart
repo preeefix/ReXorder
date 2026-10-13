@@ -141,6 +141,7 @@ class RecordingRepository {
     languageHint: row.languageHint,
     asrModelId: row.asrModelId,
     transcriptionError: row.transcriptionError,
+    speakerCountHint: row.speakerCountHint,
   );
 
   Future<void> updateTranscription({
@@ -148,6 +149,7 @@ class RecordingRepository {
     required TranscriptionStatus status,
     String? modelId,
     LanguageHint? languageHint,
+    int? speakerCountHint,
     String? error,
   }) async {
     await (_database.update(
@@ -161,6 +163,7 @@ class RecordingRepository {
         languageHint: languageHint == null
             ? const drift.Value.absent()
             : drift.Value(languageHint),
+        speakerCountHint: drift.Value(speakerCountHint),
         transcriptionError: drift.Value(error),
       ),
     );
@@ -212,6 +215,51 @@ class RecordingRepository {
               )
               .toList(),
         );
+  }
+
+  Stream<Map<int, String>> watchSpeakerNames(String recordingId) =>
+      (_database.select(_database.speakerNames)
+            ..where((row) => row.recordingId.equals(recordingId)))
+          .watch()
+          .map((rows) => {for (final row in rows) row.speaker: row.name});
+
+  Future<Map<int, String>> speakerNames(String recordingId) async {
+    final rows = await (_database.select(
+      _database.speakerNames,
+    )..where((row) => row.recordingId.equals(recordingId))).get();
+    return {for (final row in rows) row.speaker: row.name};
+  }
+
+  Future<void> setSpeakerName({
+    required String recordingId,
+    required int speaker,
+    required String name,
+  }) async {
+    final normalized = name.trim();
+    if (normalized.isEmpty) {
+      await (_database.delete(_database.speakerNames)..where(
+            (row) =>
+                row.recordingId.equals(recordingId) &
+                row.speaker.equals(speaker),
+          ))
+          .go();
+      return;
+    }
+    await _database
+        .into(_database.speakerNames)
+        .insertOnConflictUpdate(
+          db.SpeakerNamesCompanion.insert(
+            recordingId: recordingId,
+            speaker: speaker,
+            name: normalized,
+          ),
+        );
+  }
+
+  Future<void> clearSpeakerNames(String recordingId) async {
+    await (_database.delete(
+      _database.speakerNames,
+    )..where((row) => row.recordingId.equals(recordingId))).go();
   }
 
   Future<List<TranscriptSegment>> listTranscriptSegments(

@@ -21,6 +21,7 @@ class Recordings extends Table {
       textEnum<LanguageHint>().withDefault(const Constant('auto'))();
   TextColumn get asrModelId => text().nullable()();
   TextColumn get transcriptionError => text().nullable()();
+  IntColumn get speakerCountHint => integer().nullable()();
 
   @override
   Set<Column<Object>> get primaryKey => {id};
@@ -47,7 +48,21 @@ class TranscriptSegments extends Table {
   ];
 }
 
-@DriftDatabase(tables: [Recordings, TranscriptSegments])
+class SpeakerNames extends Table {
+  TextColumn get recordingId => text()();
+  IntColumn get speaker => integer()();
+  TextColumn get name => text()();
+
+  @override
+  Set<Column<Object>> get primaryKey => {recordingId, speaker};
+
+  @override
+  List<String> get customConstraints => [
+    'FOREIGN KEY (recording_id) REFERENCES recordings (id) ON DELETE CASCADE',
+  ];
+}
+
+@DriftDatabase(tables: [Recordings, TranscriptSegments, SpeakerNames])
 class AppDatabase extends _$AppDatabase {
   AppDatabase(super.executor);
 
@@ -56,7 +71,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -68,6 +83,10 @@ class AppDatabase extends _$AppDatabase {
         await migrator.addColumn(recordings, recordings.asrModelId);
         await migrator.addColumn(recordings, recordings.transcriptionError);
         await migrator.createTable(transcriptSegments);
+      }
+      if (from < 3) {
+        await migrator.addColumn(recordings, recordings.speakerCountHint);
+        await migrator.createTable(speakerNames);
       }
     },
     beforeOpen: (details) async {

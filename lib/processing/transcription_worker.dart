@@ -5,11 +5,19 @@ import 'dart:isolate';
 import 'package:path/path.dart' as p;
 
 import '../asr/asr_engine.dart';
+import '../asr/diarizer.dart';
 import '../asr/vad_segmenter.dart';
 import '../models/model_catalog.dart';
 
 abstract interface class TranscriptionProcessor {
   Future<List<SpeechSampleRange>> segment(File wavFile, String vadModelPath);
+  Future<List<SpeakerTurn>> diarize(
+    File wavFile, {
+    required String segmentationModelPath,
+    required String embeddingModelPath,
+    required int? speakerCountHint,
+    required void Function(int done, int total) onProgress,
+  });
   Future<void> openModel({
     required CatalogModel model,
     required String language,
@@ -27,6 +35,7 @@ class TranscriptionWorker implements TranscriptionProcessor {
 
   final ReceivePort _responses;
   final Map<int, Completer<Object?>> _pending = {};
+  final Map<int, void Function(int, int)> _progressCallbacks = {};
   Isolate? _isolate;
   SendPort? _commands;
   int _nextRequestId = 0;
@@ -45,7 +54,20 @@ class TranscriptionWorker implements TranscriptionProcessor {
         return;
       }
       final response = message as Map<Object?, Object?>;
-      final completer = worker._pending.remove(response['id']);
+      final id = response['id']! as int;
+      final progress = response['progress'];
+      if (progress != null) {
+        final values = progress as List<Object?>;
+        try {
+          worker._progressCallbacks[id]?.call(
+            values[0]! as int,
+            values[1]! as int,
+          );
+        } catch (_) {}
+        return;
+      }
+      final completer = worker._pending.remove(id);
+      worker._progressCallbacks.remove(id);
       if (completer == null || completer.isCompleted) return;
       if (response['error'] != null) {
         completer.completeError(
@@ -65,13 +87,15 @@ class TranscriptionWorker implements TranscriptionProcessor {
   }
 
   Future<Object?> _request(
-    String action, [
+    String action, {
     Map<String, Object?> data = const {},
-  ]) {
+    void Function(int, int)? onProgress,
+  }) {
     if (_isClosed) throw StateError('Transcription worker is closed.');
     final id = _nextRequestId++;
     final completer = Completer<Object?>();
     _pending[id] = completer;
+    if (onProgress != null) _progressCallbacks[id] = onProgress;
     _commands!.send({'id': id, 'action': action, ...data});
     return completer.future;
   }
@@ -82,10 +106,10 @@ class TranscriptionWorker implements TranscriptionProcessor {
     String vadModelPath,
   ) async {
     final value =
-        await _request('segment', {
-              'wavPath': wavFile.path,
-              'vadModelPath': vadModelPath,
-            })
+        await _request(
+              'segment',
+              data: {'wavPath': wavFile.path, 'vadModelPath': vadModelPath},
+            )
             as List<Object?>;
     return value.map((range) {
       final entry = range as Map<Object?, Object?>;
@@ -94,11 +118,44 @@ class TranscriptionWorker implements TranscriptionProcessor {
   }
 
   @override
+  Future<List<SpeakerTurn>> diarize(
+    File wavFile, {
+    required String segmentationModelPath,
+    required String embeddingModelPath,
+    required int? speakerCountHint,
+    required void Function(int done, int total) onProgress,
+  }) async {
+    final value =
+        await _request(
+              'diarize',
+              data: {
+                'wavPath': wavFile.path,
+                'segmentationModelPath': segmentationModelPath,
+                'embeddingModelPath': embeddingModelPath,
+                'speakerCountHint': speakerCountHint,
+              },
+              onProgress: onProgress,
+            )
+            as List<Object?>;
+    return value.map((entry) {
+      final item = entry as Map<Object?, Object?>;
+      return SpeakerTurn(
+        startSample: item['start']! as int,
+        endSample: item['end']! as int,
+        speaker: item['speaker']! as int,
+      );
+    }).toList();
+  }
+
+  @override
   Future<void> openModel({
     required CatalogModel model,
     required String language,
   }) async {
-    await _request('openModel', {'modelId': model.id, 'language': language});
+    await _request(
+      'openModel',
+      data: {'modelId': model.id, 'language': language},
+    );
   }
 
   @override
@@ -108,11 +165,14 @@ class TranscriptionWorker implements TranscriptionProcessor {
     required int endSample,
   }) async {
     final value =
-        await _request('transcribe', {
-              'wavPath': wavFile.path,
-              'startSample': startSample,
-              'endSample': endSample,
-            })
+        await _request(
+              'transcribe',
+              data: {
+                'wavPath': wavFile.path,
+                'startSample': startSample,
+                'endSample': endSample,
+              },
+            )
             as Map<Object?, Object?>;
     return AsrTranscript(
       text: value['text']! as String,
@@ -159,6 +219,13 @@ void _transcriptionWorkerMain(List<Object?> arguments) {
           request['wavPath']! as String,
           request['vadModelPath']! as String,
         ),
+        'diarize' => await _diarizeAudio(
+          request,
+          (done, total) => replyPort.send({
+            'id': id,
+            'progress': [done, total],
+          }),
+        ),
         'openModel' => _openModel(
           modelsDirectory,
           request,
@@ -187,6 +254,34 @@ void _transcriptionWorkerMain(List<Object?> arguments) {
       (_) => handle(message as Map<Object?, Object?>),
     );
   });
+}
+
+Future<List<Map<String, int>>> _diarizeAudio(
+  Map<Object?, Object?> request,
+  void Function(int done, int total) onProgress,
+) async {
+  final diarizer = Diarizer(
+    segmentationModelPath: request['segmentationModelPath']! as String,
+    embeddingModelPath: request['embeddingModelPath']! as String,
+    speakerCountHint: request['speakerCountHint'] as int?,
+  );
+  try {
+    final turns = await diarizer.diarize(
+      File(request['wavPath']! as String),
+      onProgress: onProgress,
+    );
+    return turns
+        .map(
+          (turn) => {
+            'start': turn.startSample,
+            'end': turn.endSample,
+            'speaker': turn.speaker,
+          },
+        )
+        .toList();
+  } finally {
+    diarizer.dispose();
+  }
 }
 
 Future<List<Map<String, int>>> _segmentAudio(

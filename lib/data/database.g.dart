@@ -125,6 +125,17 @@ class $RecordingsTable extends Recordings
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _speakerCountHintMeta = const VerificationMeta(
+    'speakerCountHint',
+  );
+  @override
+  late final GeneratedColumn<int> speakerCountHint = GeneratedColumn<int>(
+    'speaker_count_hint',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -138,6 +149,7 @@ class $RecordingsTable extends Recordings
     languageHint,
     asrModelId,
     transcriptionError,
+    speakerCountHint,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -214,6 +226,15 @@ class $RecordingsTable extends Recordings
         ),
       );
     }
+    if (data.containsKey('speaker_count_hint')) {
+      context.handle(
+        _speakerCountHintMeta,
+        speakerCountHint.isAcceptableOrUnknown(
+          data['speaker_count_hint']!,
+          _speakerCountHintMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -274,6 +295,10 @@ class $RecordingsTable extends Recordings
         DriftSqlType.string,
         data['${effectivePrefix}transcription_error'],
       ),
+      speakerCountHint: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}speaker_count_hint'],
+      ),
     );
   }
 
@@ -306,6 +331,7 @@ class Recording extends DataClass implements Insertable<Recording> {
   final LanguageHint languageHint;
   final String? asrModelId;
   final String? transcriptionError;
+  final int? speakerCountHint;
   const Recording({
     required this.id,
     required this.title,
@@ -318,6 +344,7 @@ class Recording extends DataClass implements Insertable<Recording> {
     required this.languageHint,
     this.asrModelId,
     this.transcriptionError,
+    this.speakerCountHint,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -351,6 +378,9 @@ class Recording extends DataClass implements Insertable<Recording> {
     if (!nullToAbsent || transcriptionError != null) {
       map['transcription_error'] = Variable<String>(transcriptionError);
     }
+    if (!nullToAbsent || speakerCountHint != null) {
+      map['speaker_count_hint'] = Variable<int>(speakerCountHint);
+    }
     return map;
   }
 
@@ -371,6 +401,9 @@ class Recording extends DataClass implements Insertable<Recording> {
       transcriptionError: transcriptionError == null && nullToAbsent
           ? const Value.absent()
           : Value(transcriptionError),
+      speakerCountHint: speakerCountHint == null && nullToAbsent
+          ? const Value.absent()
+          : Value(speakerCountHint),
     );
   }
 
@@ -398,6 +431,7 @@ class Recording extends DataClass implements Insertable<Recording> {
       transcriptionError: serializer.fromJson<String?>(
         json['transcriptionError'],
       ),
+      speakerCountHint: serializer.fromJson<int?>(json['speakerCountHint']),
     );
   }
   @override
@@ -423,6 +457,7 @@ class Recording extends DataClass implements Insertable<Recording> {
       ),
       'asrModelId': serializer.toJson<String?>(asrModelId),
       'transcriptionError': serializer.toJson<String?>(transcriptionError),
+      'speakerCountHint': serializer.toJson<int?>(speakerCountHint),
     };
   }
 
@@ -438,6 +473,7 @@ class Recording extends DataClass implements Insertable<Recording> {
     LanguageHint? languageHint,
     Value<String?> asrModelId = const Value.absent(),
     Value<String?> transcriptionError = const Value.absent(),
+    Value<int?> speakerCountHint = const Value.absent(),
   }) => Recording(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -452,6 +488,9 @@ class Recording extends DataClass implements Insertable<Recording> {
     transcriptionError: transcriptionError.present
         ? transcriptionError.value
         : this.transcriptionError,
+    speakerCountHint: speakerCountHint.present
+        ? speakerCountHint.value
+        : this.speakerCountHint,
   );
   Recording copyWithCompanion(RecordingsCompanion data) {
     return Recording(
@@ -478,6 +517,9 @@ class Recording extends DataClass implements Insertable<Recording> {
       transcriptionError: data.transcriptionError.present
           ? data.transcriptionError.value
           : this.transcriptionError,
+      speakerCountHint: data.speakerCountHint.present
+          ? data.speakerCountHint.value
+          : this.speakerCountHint,
     );
   }
 
@@ -494,7 +536,8 @@ class Recording extends DataClass implements Insertable<Recording> {
           ..write('transcriptionStatus: $transcriptionStatus, ')
           ..write('languageHint: $languageHint, ')
           ..write('asrModelId: $asrModelId, ')
-          ..write('transcriptionError: $transcriptionError')
+          ..write('transcriptionError: $transcriptionError, ')
+          ..write('speakerCountHint: $speakerCountHint')
           ..write(')'))
         .toString();
   }
@@ -512,6 +555,7 @@ class Recording extends DataClass implements Insertable<Recording> {
     languageHint,
     asrModelId,
     transcriptionError,
+    speakerCountHint,
   );
   @override
   bool operator ==(Object other) =>
@@ -527,7 +571,8 @@ class Recording extends DataClass implements Insertable<Recording> {
           other.transcriptionStatus == this.transcriptionStatus &&
           other.languageHint == this.languageHint &&
           other.asrModelId == this.asrModelId &&
-          other.transcriptionError == this.transcriptionError);
+          other.transcriptionError == this.transcriptionError &&
+          other.speakerCountHint == this.speakerCountHint);
 }
 
 class RecordingsCompanion extends UpdateCompanion<Recording> {
@@ -542,6 +587,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
   final Value<LanguageHint> languageHint;
   final Value<String?> asrModelId;
   final Value<String?> transcriptionError;
+  final Value<int?> speakerCountHint;
   final Value<int> rowid;
   const RecordingsCompanion({
     this.id = const Value.absent(),
@@ -555,6 +601,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     this.languageHint = const Value.absent(),
     this.asrModelId = const Value.absent(),
     this.transcriptionError = const Value.absent(),
+    this.speakerCountHint = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   RecordingsCompanion.insert({
@@ -569,6 +616,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     this.languageHint = const Value.absent(),
     this.asrModelId = const Value.absent(),
     this.transcriptionError = const Value.absent(),
+    this.speakerCountHint = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        title = Value(title),
@@ -589,6 +637,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     Expression<String>? languageHint,
     Expression<String>? asrModelId,
     Expression<String>? transcriptionError,
+    Expression<int>? speakerCountHint,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -604,6 +653,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
       if (languageHint != null) 'language_hint': languageHint,
       if (asrModelId != null) 'asr_model_id': asrModelId,
       if (transcriptionError != null) 'transcription_error': transcriptionError,
+      if (speakerCountHint != null) 'speaker_count_hint': speakerCountHint,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -620,6 +670,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     Value<LanguageHint>? languageHint,
     Value<String?>? asrModelId,
     Value<String?>? transcriptionError,
+    Value<int?>? speakerCountHint,
     Value<int>? rowid,
   }) {
     return RecordingsCompanion(
@@ -634,6 +685,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
       languageHint: languageHint ?? this.languageHint,
       asrModelId: asrModelId ?? this.asrModelId,
       transcriptionError: transcriptionError ?? this.transcriptionError,
+      speakerCountHint: speakerCountHint ?? this.speakerCountHint,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -682,6 +734,9 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     if (transcriptionError.present) {
       map['transcription_error'] = Variable<String>(transcriptionError.value);
     }
+    if (speakerCountHint.present) {
+      map['speaker_count_hint'] = Variable<int>(speakerCountHint.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -702,6 +757,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
           ..write('languageHint: $languageHint, ')
           ..write('asrModelId: $asrModelId, ')
           ..write('transcriptionError: $transcriptionError, ')
+          ..write('speakerCountHint: $speakerCountHint, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -1207,12 +1263,282 @@ class TranscriptSegmentsCompanion extends UpdateCompanion<TranscriptSegment> {
   }
 }
 
+class $SpeakerNamesTable extends SpeakerNames
+    with TableInfo<$SpeakerNamesTable, SpeakerName> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $SpeakerNamesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _recordingIdMeta = const VerificationMeta(
+    'recordingId',
+  );
+  @override
+  late final GeneratedColumn<String> recordingId = GeneratedColumn<String>(
+    'recording_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _speakerMeta = const VerificationMeta(
+    'speaker',
+  );
+  @override
+  late final GeneratedColumn<int> speaker = GeneratedColumn<int>(
+    'speaker',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [recordingId, speaker, name];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'speaker_names';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<SpeakerName> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('recording_id')) {
+      context.handle(
+        _recordingIdMeta,
+        recordingId.isAcceptableOrUnknown(
+          data['recording_id']!,
+          _recordingIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_recordingIdMeta);
+    }
+    if (data.containsKey('speaker')) {
+      context.handle(
+        _speakerMeta,
+        speaker.isAcceptableOrUnknown(data['speaker']!, _speakerMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_speakerMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {recordingId, speaker};
+  @override
+  SpeakerName map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return SpeakerName(
+      recordingId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}recording_id'],
+      )!,
+      speaker: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}speaker'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+    );
+  }
+
+  @override
+  $SpeakerNamesTable createAlias(String alias) {
+    return $SpeakerNamesTable(attachedDatabase, alias);
+  }
+}
+
+class SpeakerName extends DataClass implements Insertable<SpeakerName> {
+  final String recordingId;
+  final int speaker;
+  final String name;
+  const SpeakerName({
+    required this.recordingId,
+    required this.speaker,
+    required this.name,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['recording_id'] = Variable<String>(recordingId);
+    map['speaker'] = Variable<int>(speaker);
+    map['name'] = Variable<String>(name);
+    return map;
+  }
+
+  SpeakerNamesCompanion toCompanion(bool nullToAbsent) {
+    return SpeakerNamesCompanion(
+      recordingId: Value(recordingId),
+      speaker: Value(speaker),
+      name: Value(name),
+    );
+  }
+
+  factory SpeakerName.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return SpeakerName(
+      recordingId: serializer.fromJson<String>(json['recordingId']),
+      speaker: serializer.fromJson<int>(json['speaker']),
+      name: serializer.fromJson<String>(json['name']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'recordingId': serializer.toJson<String>(recordingId),
+      'speaker': serializer.toJson<int>(speaker),
+      'name': serializer.toJson<String>(name),
+    };
+  }
+
+  SpeakerName copyWith({String? recordingId, int? speaker, String? name}) =>
+      SpeakerName(
+        recordingId: recordingId ?? this.recordingId,
+        speaker: speaker ?? this.speaker,
+        name: name ?? this.name,
+      );
+  SpeakerName copyWithCompanion(SpeakerNamesCompanion data) {
+    return SpeakerName(
+      recordingId: data.recordingId.present
+          ? data.recordingId.value
+          : this.recordingId,
+      speaker: data.speaker.present ? data.speaker.value : this.speaker,
+      name: data.name.present ? data.name.value : this.name,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SpeakerName(')
+          ..write('recordingId: $recordingId, ')
+          ..write('speaker: $speaker, ')
+          ..write('name: $name')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(recordingId, speaker, name);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is SpeakerName &&
+          other.recordingId == this.recordingId &&
+          other.speaker == this.speaker &&
+          other.name == this.name);
+}
+
+class SpeakerNamesCompanion extends UpdateCompanion<SpeakerName> {
+  final Value<String> recordingId;
+  final Value<int> speaker;
+  final Value<String> name;
+  final Value<int> rowid;
+  const SpeakerNamesCompanion({
+    this.recordingId = const Value.absent(),
+    this.speaker = const Value.absent(),
+    this.name = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  SpeakerNamesCompanion.insert({
+    required String recordingId,
+    required int speaker,
+    required String name,
+    this.rowid = const Value.absent(),
+  }) : recordingId = Value(recordingId),
+       speaker = Value(speaker),
+       name = Value(name);
+  static Insertable<SpeakerName> custom({
+    Expression<String>? recordingId,
+    Expression<int>? speaker,
+    Expression<String>? name,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (recordingId != null) 'recording_id': recordingId,
+      if (speaker != null) 'speaker': speaker,
+      if (name != null) 'name': name,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  SpeakerNamesCompanion copyWith({
+    Value<String>? recordingId,
+    Value<int>? speaker,
+    Value<String>? name,
+    Value<int>? rowid,
+  }) {
+    return SpeakerNamesCompanion(
+      recordingId: recordingId ?? this.recordingId,
+      speaker: speaker ?? this.speaker,
+      name: name ?? this.name,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (recordingId.present) {
+      map['recording_id'] = Variable<String>(recordingId.value);
+    }
+    if (speaker.present) {
+      map['speaker'] = Variable<int>(speaker.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('SpeakerNamesCompanion(')
+          ..write('recordingId: $recordingId, ')
+          ..write('speaker: $speaker, ')
+          ..write('name: $name, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
   late final $RecordingsTable recordings = $RecordingsTable(this);
   late final $TranscriptSegmentsTable transcriptSegments =
       $TranscriptSegmentsTable(this);
+  late final $SpeakerNamesTable speakerNames = $SpeakerNamesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -1220,6 +1546,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   List<DatabaseSchemaEntity> get allSchemaEntities => [
     recordings,
     transcriptSegments,
+    speakerNames,
   ];
 }
 
@@ -1236,6 +1563,7 @@ typedef $$RecordingsTableCreateCompanionBuilder =
       Value<LanguageHint> languageHint,
       Value<String?> asrModelId,
       Value<String?> transcriptionError,
+      Value<int?> speakerCountHint,
       Value<int> rowid,
     });
 typedef $$RecordingsTableUpdateCompanionBuilder =
@@ -1251,6 +1579,7 @@ typedef $$RecordingsTableUpdateCompanionBuilder =
       Value<LanguageHint> languageHint,
       Value<String?> asrModelId,
       Value<String?> transcriptionError,
+      Value<int?> speakerCountHint,
       Value<int> rowid,
     });
 
@@ -1324,6 +1653,11 @@ class $$RecordingsTableFilterComposer
     column: $table.transcriptionError,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<int> get speakerCountHint => $composableBuilder(
+    column: $table.speakerCountHint,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
 class $$RecordingsTableOrderingComposer
@@ -1389,6 +1723,11 @@ class $$RecordingsTableOrderingComposer
     column: $table.transcriptionError,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get speakerCountHint => $composableBuilder(
+    column: $table.speakerCountHint,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$RecordingsTableAnnotationComposer
@@ -1446,6 +1785,11 @@ class $$RecordingsTableAnnotationComposer
     column: $table.transcriptionError,
     builder: (column) => column,
   );
+
+  GeneratedColumn<int> get speakerCountHint => $composableBuilder(
+    column: $table.speakerCountHint,
+    builder: (column) => column,
+  );
 }
 
 class $$RecordingsTableTableManager
@@ -1491,6 +1835,7 @@ class $$RecordingsTableTableManager
                 Value<LanguageHint> languageHint = const Value.absent(),
                 Value<String?> asrModelId = const Value.absent(),
                 Value<String?> transcriptionError = const Value.absent(),
+                Value<int?> speakerCountHint = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RecordingsCompanion(
                 id: id,
@@ -1504,6 +1849,7 @@ class $$RecordingsTableTableManager
                 languageHint: languageHint,
                 asrModelId: asrModelId,
                 transcriptionError: transcriptionError,
+                speakerCountHint: speakerCountHint,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -1520,6 +1866,7 @@ class $$RecordingsTableTableManager
                 Value<LanguageHint> languageHint = const Value.absent(),
                 Value<String?> asrModelId = const Value.absent(),
                 Value<String?> transcriptionError = const Value.absent(),
+                Value<int?> speakerCountHint = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => RecordingsCompanion.insert(
                 id: id,
@@ -1533,6 +1880,7 @@ class $$RecordingsTableTableManager
                 languageHint: languageHint,
                 asrModelId: asrModelId,
                 transcriptionError: transcriptionError,
+                speakerCountHint: speakerCountHint,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -1843,6 +2191,179 @@ typedef $$TranscriptSegmentsTableProcessedTableManager =
       TranscriptSegment,
       PrefetchHooks Function()
     >;
+typedef $$SpeakerNamesTableCreateCompanionBuilder =
+    SpeakerNamesCompanion Function({
+      required String recordingId,
+      required int speaker,
+      required String name,
+      Value<int> rowid,
+    });
+typedef $$SpeakerNamesTableUpdateCompanionBuilder =
+    SpeakerNamesCompanion Function({
+      Value<String> recordingId,
+      Value<int> speaker,
+      Value<String> name,
+      Value<int> rowid,
+    });
+
+class $$SpeakerNamesTableFilterComposer
+    extends Composer<_$AppDatabase, $SpeakerNamesTable> {
+  $$SpeakerNamesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get recordingId => $composableBuilder(
+    column: $table.recordingId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get speaker => $composableBuilder(
+    column: $table.speaker,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$SpeakerNamesTableOrderingComposer
+    extends Composer<_$AppDatabase, $SpeakerNamesTable> {
+  $$SpeakerNamesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get recordingId => $composableBuilder(
+    column: $table.recordingId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get speaker => $composableBuilder(
+    column: $table.speaker,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$SpeakerNamesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $SpeakerNamesTable> {
+  $$SpeakerNamesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get recordingId => $composableBuilder(
+    column: $table.recordingId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get speaker =>
+      $composableBuilder(column: $table.speaker, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+}
+
+class $$SpeakerNamesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $SpeakerNamesTable,
+          SpeakerName,
+          $$SpeakerNamesTableFilterComposer,
+          $$SpeakerNamesTableOrderingComposer,
+          $$SpeakerNamesTableAnnotationComposer,
+          $$SpeakerNamesTableCreateCompanionBuilder,
+          $$SpeakerNamesTableUpdateCompanionBuilder,
+          (
+            SpeakerName,
+            BaseReferences<_$AppDatabase, $SpeakerNamesTable, SpeakerName>,
+          ),
+          SpeakerName,
+          PrefetchHooks Function()
+        > {
+  $$SpeakerNamesTableTableManager(_$AppDatabase db, $SpeakerNamesTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$SpeakerNamesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$SpeakerNamesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$SpeakerNamesTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<String> recordingId = const Value.absent(),
+                Value<int> speaker = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => SpeakerNamesCompanion(
+                recordingId: recordingId,
+                speaker: speaker,
+                name: name,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String recordingId,
+                required int speaker,
+                required String name,
+                Value<int> rowid = const Value.absent(),
+              }) => SpeakerNamesCompanion.insert(
+                recordingId: recordingId,
+                speaker: speaker,
+                name: name,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$SpeakerNamesTable, SpeakerName>(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $SpeakerNamesTable,
+                    SpeakerName
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$SpeakerNamesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $SpeakerNamesTable,
+      SpeakerName,
+      $$SpeakerNamesTableFilterComposer,
+      $$SpeakerNamesTableOrderingComposer,
+      $$SpeakerNamesTableAnnotationComposer,
+      $$SpeakerNamesTableCreateCompanionBuilder,
+      $$SpeakerNamesTableUpdateCompanionBuilder,
+      (
+        SpeakerName,
+        BaseReferences<_$AppDatabase, $SpeakerNamesTable, SpeakerName>,
+      ),
+      SpeakerName,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -1851,4 +2372,6 @@ class $AppDatabaseManager {
       $$RecordingsTableTableManager(_db, _db.recordings);
   $$TranscriptSegmentsTableTableManager get transcriptSegments =>
       $$TranscriptSegmentsTableTableManager(_db, _db.transcriptSegments);
+  $$SpeakerNamesTableTableManager get speakerNames =>
+      $$SpeakerNamesTableTableManager(_db, _db.speakerNames);
 }

@@ -62,10 +62,12 @@ class AsrEngine {
         numThreads: numThreads,
         debug: false,
       ),
-      ModelType.vad => throw ArgumentError.value(
+      ModelType.vad ||
+      ModelType.segmentation ||
+      ModelType.embedding => throw ArgumentError.value(
         model.id,
         'model',
-        'A VAD model cannot be used for transcription.',
+        'This model cannot be used for transcription.',
       ),
     };
     return AsrEngine._(

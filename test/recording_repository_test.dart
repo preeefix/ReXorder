@@ -49,9 +49,41 @@ void main() {
     await repository.replaceTranscriptSegments(recording.id, const [
       TranscriptSegmentDraft(index: 0, startMs: 0, endMs: 1000, text: 'hello'),
     ]);
+    await repository.setSpeakerName(
+      recordingId: recording.id,
+      speaker: 0,
+      name: 'Alice',
+    );
 
     await repository.delete(recording.id);
 
     expect(await repository.listTranscriptSegments(recording.id), isEmpty);
+    expect(await repository.speakerNames(recording.id), isEmpty);
+  });
+
+  test('speaker names can be set, watched, and cleared', () async {
+    final directory = await Directory.systemTemp.createTemp('rexorder-repo-');
+    addTearDown(() => directory.delete(recursive: true));
+    final database = AppDatabase.memory();
+    addTearDown(database.close);
+    final repository = RecordingRepository(database, directory);
+    final recording = await repository.createRecording(id: 'speaker-names');
+    final names = repository.watchSpeakerNames(recording.id);
+
+    expect(await names.first, isEmpty);
+    await repository.setSpeakerName(
+      recordingId: recording.id,
+      speaker: 0,
+      name: '  Alice  ',
+    );
+    expect(await names.first, {0: 'Alice'});
+    expect(await repository.speakerNames(recording.id), {0: 'Alice'});
+
+    await repository.setSpeakerName(
+      recordingId: recording.id,
+      speaker: 0,
+      name: '',
+    );
+    expect(await repository.speakerNames(recording.id), isEmpty);
   });
 }
