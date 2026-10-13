@@ -20,11 +20,30 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      - run: flutter build apk --release --target-platform android-arm64,android-x64 --split-per-abi
+      - name: Configure release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$ANDROID_KEYSTORE_BASE64" ]]; then
+            echo "::error::Release keystore secrets are not configured"
+            exit 1
+          fi
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_PATH=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+      - run: flutter build apk --release --build-number=${{ github.run_number }} --target-platform android-arm64,android-x64 --split-per-abi
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
       - run: tool/check_no_internet.sh build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
       - run: tool/check_no_internet.sh build/app/outputs/flutter-apk/app-x86_64-release.apk
       - run: tool/check_no_models.sh build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
       - run: tool/check_no_models.sh build/app/outputs/flutter-apk/app-x86_64-release.apk
+      - run: tool/check_release_signing.sh build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+      - run: tool/check_release_signing.sh build/app/outputs/flutter-apk/app-x86_64-release.apk
       - uses: actions/upload-artifact@v4
         with:
           name: rexorder-release-apks
