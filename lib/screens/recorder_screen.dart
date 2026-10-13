@@ -91,7 +91,23 @@ class RecorderScreen extends ConsumerWidget {
                       },
                     ),
                     if (isActive) ...[
-                      const SizedBox(width: 32),
+                      const SizedBox(width: 16),
+                      FilledButton.tonalIcon(
+                        onPressed: () async {
+                          final positionMs = await controller.addBookmark();
+                          if (!context.mounted || positionMs == null) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Bookmark at ${_formatDuration(Duration(milliseconds: positionMs))}',
+                              ),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.bookmark_add_outlined),
+                        label: const Text('Bookmark'),
+                      ),
+                      const SizedBox(width: 12),
                       FilledButton.tonalIcon(
                         onPressed: state.phase == RecorderPhase.saving
                             ? null

@@ -62,6 +62,11 @@ void main() {
       final wav = File('${recordingsDirectory.path}/existing.wav')
         ..writeAsBytesSync([1, 2, 3]);
       await repository.createRecording(id: 'existing');
+      final bookmark = await repository.addBookmark(
+        'existing',
+        750,
+        label: 'before recovery',
+      );
 
       await recoverOrphanedRecordings(
         recordingsDirectory: recordingsDirectory,
@@ -75,6 +80,7 @@ void main() {
       expect(wavBytes.length, pcmBytes.length + 44);
       expect(wavBytes.sublist(44), pcmBytes);
       expect(await pcm.exists(), isFalse);
+      expect(await repository.watchBookmarks('existing').first, [bookmark]);
     },
   );
 

@@ -2,16 +2,20 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../app.dart';
 import '../data/providers.dart';
+import '../domain/bookmark.dart';
 import '../domain/recording.dart';
 import '../domain/transcript_segment.dart';
+import '../export/transcript_export.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../models/model_catalog.dart';
 import '../models/model_import_client.dart';
@@ -19,9 +23,14 @@ import '../models/transcription_models_banner.dart';
 import '../processing/transcription_queue.dart';
 
 class DetailScreen extends ConsumerStatefulWidget {
-  const DetailScreen({required this.recordingId, super.key});
+  const DetailScreen({
+    required this.recordingId,
+    this.initialPositionMs,
+    super.key,
+  });
 
   final String recordingId;
+  final int? initialPositionMs;
 
   @override
   ConsumerState<DetailScreen> createState() => _DetailScreenState();
@@ -50,6 +59,10 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
         p.join(ref.read(recordingsDirectoryProvider).path, recording.fileName),
       );
       await _player.setFilePath(file.path);
+      final initialPositionMs = widget.initialPositionMs;
+      if (initialPositionMs != null) {
+        await _player.seek(Duration(milliseconds: initialPositionMs));
+      }
       if (mounted) setState(() => _recording = recording);
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
@@ -94,172 +107,278 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
               initialData: const {},
               builder: (context, namesSnapshot) {
                 final speakerNames = namesSnapshot.data ?? const {};
-                return Scaffold(
-                  appBar: AppBar(
-                    title: Text(l10n.recordingDetails),
-                    actions: [
-                      IconButton(
-                        tooltip: l10n.rename,
-                        onPressed: () => _rename(current),
-                        icon: const Icon(Icons.edit_outlined),
-                      ),
-                      IconButton(
-                        tooltip: l10n.share,
-                        onPressed: () => _share(current),
-                        icon: const Icon(Icons.share_outlined),
-                      ),
-                      IconButton(
-                        tooltip: l10n.delete,
-                        onPressed: () => _delete(current),
-                        icon: const Icon(Icons.delete_outline),
-                      ),
-                    ],
-                  ),
-                  body: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          current.title,
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          DateFormat(
-                            'yyyy-MM-dd HH:mm',
-                          ).format(current.createdAt.toLocal()),
-                          style: Theme.of(context).textTheme.bodyMedium,
-                        ),
-                        const SizedBox(height: 16),
-                        Card(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 16,
+                return StreamBuilder<List<Bookmark>>(
+                  stream: repository.watchBookmarks(recording.id),
+                  initialData: const [],
+                  builder: (context, bookmarksSnapshot) {
+                    final bookmarks = bookmarksSnapshot.data ?? const [];
+                    return Scaffold(
+                      appBar: AppBar(
+                        title: Text(l10n.recordingDetails),
+                        actions: [
+                          IconButton(
+                            tooltip: l10n.rename,
+                            onPressed: () => _rename(current),
+                            icon: const Icon(Icons.edit_outlined),
+                          ),
+                          PopupMenuButton<String>(
+                            tooltip: 'Export',
+                            enabled: segments.isNotEmpty,
+                            onSelected: (format) => _export(
+                              current,
+                              segments,
+                              speakerNames,
+                              bookmarks,
+                              format,
                             ),
-                            child: Column(
-                              children: [
-                                StreamBuilder<Duration?>(
-                                  stream: _player.durationStream,
-                                  builder: (context, snapshot) {
-                                    final duration =
-                                        snapshot.data ?? Duration.zero;
-                                    return StreamBuilder<Duration>(
-                                      stream: _player.positionStream,
-                                      builder: (context, positionSnapshot) {
-                                        final position =
-                                            positionSnapshot.data ??
-                                            Duration.zero;
-                                        final maxMilliseconds = duration
-                                            .inMilliseconds
-                                            .toDouble()
-                                            .clamp(1.0, double.infinity);
-                                        return Column(
-                                          children: [
-                                            Slider(
-                                              value: position.inMilliseconds
-                                                  .toDouble()
-                                                  .clamp(0.0, maxMilliseconds),
-                                              max: maxMilliseconds,
-                                              onChanged: (value) =>
-                                                  _player.seek(
-                                                    Duration(
-                                                      milliseconds: value
-                                                          .round(),
-                                                    ),
-                                                  ),
-                                            ),
-                                            Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment
-                                                      .spaceBetween,
+                            itemBuilder: (context) => const [
+                              PopupMenuItem(value: 'txt', child: Text('TXT')),
+                              PopupMenuItem(value: 'srt', child: Text('SRT')),
+                              PopupMenuItem(value: 'vtt', child: Text('VTT')),
+                              PopupMenuItem(value: 'json', child: Text('JSON')),
+                              PopupMenuItem(
+                                value: 'copy',
+                                child: Text('Copy text'),
+                              ),
+                            ],
+                          ),
+                          IconButton(
+                            tooltip: l10n.share,
+                            onPressed: () => _share(current),
+                            icon: const Icon(Icons.share_outlined),
+                          ),
+                          IconButton(
+                            tooltip: l10n.delete,
+                            onPressed: () => _delete(current),
+                            icon: const Icon(Icons.delete_outline),
+                          ),
+                        ],
+                      ),
+                      body: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              current.title,
+                              style: Theme.of(context).textTheme.headlineSmall,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              DateFormat(
+                                'yyyy-MM-dd HH:mm',
+                              ).format(current.createdAt.toLocal()),
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 16),
+                            Card(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 16,
+                                ),
+                                child: Column(
+                                  children: [
+                                    StreamBuilder<Duration?>(
+                                      stream: _player.durationStream,
+                                      builder: (context, snapshot) {
+                                        final duration =
+                                            snapshot.data ?? Duration.zero;
+                                        return StreamBuilder<Duration>(
+                                          stream: _player.positionStream,
+                                          builder: (context, positionSnapshot) {
+                                            final position =
+                                                positionSnapshot.data ??
+                                                Duration.zero;
+                                            final maxMilliseconds = duration
+                                                .inMilliseconds
+                                                .toDouble()
+                                                .clamp(1.0, double.infinity);
+                                            return Column(
                                               children: [
-                                                Text(_format(position)),
-                                                Text(_format(duration)),
+                                                Slider(
+                                                  value: position.inMilliseconds
+                                                      .toDouble()
+                                                      .clamp(
+                                                        0.0,
+                                                        maxMilliseconds,
+                                                      ),
+                                                  max: maxMilliseconds,
+                                                  onChanged: (value) =>
+                                                      _player.seek(
+                                                        Duration(
+                                                          milliseconds: value
+                                                              .round(),
+                                                        ),
+                                                      ),
+                                                ),
+                                                Row(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment
+                                                          .spaceBetween,
+                                                  children: [
+                                                    Text(_format(position)),
+                                                    Text(_format(duration)),
+                                                  ],
+                                                ),
                                               ],
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                                    const SizedBox(height: 8),
+                                    StreamBuilder<PlayerState>(
+                                      stream: _player.playerStateStream,
+                                      builder: (context, snapshot) {
+                                        final playing =
+                                            snapshot.data?.playing ?? false;
+                                        return Row(
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.center,
+                                          children: [
+                                            IconButton.filled(
+                                              iconSize: 36,
+                                              onPressed: () => playing
+                                                  ? _player.pause()
+                                                  : _player.play(),
+                                              icon: Icon(
+                                                playing
+                                                    ? Icons.pause_rounded
+                                                    : Icons.play_arrow_rounded,
+                                              ),
+                                            ),
+                                            IconButton(
+                                              tooltip: 'Add bookmark',
+                                              onPressed: () => _addBookmark(
+                                                recording.id,
+                                                _player.position.inMilliseconds,
+                                              ),
+                                              icon: const Icon(
+                                                Icons.bookmark_add_outlined,
+                                              ),
                                             ),
                                           ],
                                         );
                                       },
-                                    );
-                                  },
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(height: 8),
-                                StreamBuilder<PlayerState>(
-                                  stream: _player.playerStateStream,
-                                  builder: (context, snapshot) {
-                                    final playing =
-                                        snapshot.data?.playing ?? false;
-                                    return IconButton.filled(
-                                      iconSize: 36,
-                                      onPressed: () => playing
-                                          ? _player.pause()
-                                          : _player.play(),
-                                      icon: Icon(
-                                        playing
-                                            ? Icons.pause_rounded
-                                            : Icons.play_arrow_rounded,
+                              ),
+                            ),
+                            const TranscriptionModelsBanner(),
+                            ValueListenableBuilder<bool>(
+                              valueListenable: ref
+                                  .read(transcriptionQueueProvider)
+                                  .waitingForCharger,
+                              builder: (context, waitingForCharger, _) =>
+                                  ValueListenableBuilder<String?>(
+                                    valueListenable: ref
+                                        .read(transcriptionQueueProvider)
+                                        .stage,
+                                    builder: (context, stage, _) =>
+                                        _TranscriptionStatusRow(
+                                          recording: current,
+                                          segments: segments,
+                                          stage: stage,
+                                          waitingForCharger: waitingForCharger,
+                                          onTranscribe: () =>
+                                              _transcribe(current),
+                                          onRetry: () => _retry(current),
+                                        ),
+                                  ),
+                            ),
+                            if (bookmarks.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              Text(
+                                'Bookmarks',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              const SizedBox(height: 4),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(
+                                  maxHeight: 160,
+                                ),
+                                child: ListView.builder(
+                                  shrinkWrap: true,
+                                  itemCount: bookmarks.length,
+                                  itemBuilder: (context, index) {
+                                    final bookmark = bookmarks[index];
+                                    return Card(
+                                      child: ListTile(
+                                        dense: true,
+                                        leading: Text(
+                                          _format(
+                                            Duration(
+                                              milliseconds: bookmark.positionMs,
+                                            ),
+                                          ),
+                                        ),
+                                        title: Text(
+                                          bookmark.label?.isNotEmpty == true
+                                              ? bookmark.label!
+                                              : 'Bookmark',
+                                        ),
+                                        onTap: () => _player.seek(
+                                          Duration(
+                                            milliseconds: bookmark.positionMs,
+                                          ),
+                                        ),
+                                        onLongPress: () =>
+                                            _manageBookmark(bookmark),
                                       ),
                                     );
                                   },
                                 ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const TranscriptionModelsBanner(),
-                        ValueListenableBuilder<String?>(
-                          valueListenable: ref
-                              .read(transcriptionQueueProvider)
-                              .stage,
-                          builder: (context, stage, _) =>
-                              _TranscriptionStatusRow(
-                                recording: current,
-                                segments: segments,
-                                stage: stage,
-                                onTranscribe: () => _transcribe(current),
-                                onRetry: () => _retry(current),
                               ),
+                            ],
+                            const SizedBox(height: 8),
+                            Text(
+                              'Transcript',
+                              style: Theme.of(context).textTheme.titleMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            Expanded(
+                              child: StreamBuilder<Duration>(
+                                stream: _player.positionStream,
+                                builder: (context, snapshot) {
+                                  if (segments.isEmpty) {
+                                    return const Center(
+                                      child: Text(
+                                        'No transcript segments yet.',
+                                      ),
+                                    );
+                                  }
+                                  return _TranscriptList(
+                                    segments: segments,
+                                    speakerNames: speakerNames,
+                                    position: snapshot.data ?? Duration.zero,
+                                    onSeek: (position) =>
+                                        _player.seek(position),
+                                    onRenameSpeaker: (speaker, name) =>
+                                        _renameSpeaker(
+                                          recording.id,
+                                          speaker,
+                                          name,
+                                        ),
+                                  );
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton.icon(
+                                onPressed: () => _share(current),
+                                icon: const Icon(Icons.ios_share),
+                                label: Text(l10n.shareWav),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Transcript',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: 8),
-                        Expanded(
-                          child: StreamBuilder<Duration>(
-                            stream: _player.positionStream,
-                            builder: (context, snapshot) {
-                              if (segments.isEmpty) {
-                                return const Center(
-                                  child: Text('No transcript segments yet.'),
-                                );
-                              }
-                              return _TranscriptList(
-                                segments: segments,
-                                speakerNames: speakerNames,
-                                position: snapshot.data ?? Duration.zero,
-                                onSeek: (position) => _player.seek(position),
-                                onRenameSpeaker: (speaker, name) =>
-                                    _renameSpeaker(recording.id, speaker, name),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        SizedBox(
-                          width: double.infinity,
-                          child: OutlinedButton.icon(
-                            onPressed: () => _share(current),
-                            icon: const Icon(Icons.ios_share),
-                            label: Text(l10n.shareWav),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                      ),
+                    );
+                  },
                 );
               },
             );
@@ -506,6 +625,141 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
     );
   }
 
+  Future<void> _export(
+    Recording recording,
+    List<TranscriptSegment> segments,
+    Map<int, String> speakerNames,
+    List<Bookmark> bookmarks,
+    String format,
+  ) async {
+    if (format == 'copy') {
+      await Clipboard.setData(
+        ClipboardData(
+          text: exportTxt(
+            recording,
+            segments,
+            speakerNames,
+            bookmarks: bookmarks,
+          ),
+        ),
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Transcript copied to clipboard.')),
+        );
+      }
+      return;
+    }
+
+    final contents = switch (format) {
+      'srt' => exportSrt(
+        recording,
+        segments,
+        speakerNames,
+        bookmarks: bookmarks,
+      ),
+      'vtt' => exportVtt(
+        recording,
+        segments,
+        speakerNames,
+        bookmarks: bookmarks,
+      ),
+      'json' => exportJson(
+        recording,
+        segments,
+        speakerNames,
+        bookmarks: bookmarks,
+      ),
+      _ => exportTxt(recording, segments, speakerNames, bookmarks: bookmarks),
+    };
+    final mimeType = switch (format) {
+      'srt' => 'application/x-subrip',
+      'vtt' => 'text/vtt',
+      'json' => 'application/json',
+      _ => 'text/plain',
+    };
+    final exportsDirectory = Directory(
+      p.join((await getTemporaryDirectory()).path, 'exports'),
+    );
+    await exportsDirectory.create(recursive: true);
+    final filename = '${sanitizeExportFilename(recording.title)}.$format';
+    final file = File(p.join(exportsDirectory.path, filename));
+    await file.writeAsString(contents);
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(file.path, mimeType: mimeType)],
+        title: filename,
+      ),
+    );
+  }
+
+  Future<void> _addBookmark(String recordingId, int positionMs) async {
+    await ref
+        .read(recordingRepositoryProvider)
+        .addBookmark(recordingId, positionMs);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Bookmark at ${_format(Duration(milliseconds: positionMs))}',
+        ),
+      ),
+    );
+  }
+
+  Future<void> _manageBookmark(Bookmark bookmark) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_outlined),
+              title: const Text('Rename'),
+              onTap: () => Navigator.pop(context, 'rename'),
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete_outline),
+              title: const Text('Delete'),
+              onTap: () => Navigator.pop(context, 'delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) return;
+    final repository = ref.read(recordingRepositoryProvider);
+    if (action == 'delete') {
+      await repository.deleteBookmark(bookmark.id);
+      return;
+    }
+
+    final controller = TextEditingController(text: bookmark.label ?? '');
+    final label = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Rename bookmark'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(labelText: 'Label'),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (label != null) await repository.renameBookmark(bookmark.id, label);
+  }
+
   Future<void> _delete(Recording recording) async {
     final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
@@ -536,6 +790,7 @@ class _TranscriptionStatusRow extends StatelessWidget {
     required this.recording,
     required this.segments,
     required this.stage,
+    required this.waitingForCharger,
     required this.onTranscribe,
     required this.onRetry,
   });
@@ -543,6 +798,7 @@ class _TranscriptionStatusRow extends StatelessWidget {
   final Recording recording;
   final List<TranscriptSegment> segments;
   final String? stage;
+  final bool waitingForCharger;
   final Future<void> Function() onTranscribe;
   final Future<void> Function() onRetry;
 
@@ -553,7 +809,8 @@ class _TranscriptionStatusRow extends StatelessWidget {
     final status = recording.transcriptionStatus;
     final statusText = switch (status) {
       TranscriptionStatus.none => 'Not transcribed',
-      TranscriptionStatus.queued => 'Queued',
+      TranscriptionStatus.queued =>
+        waitingForCharger ? 'Waiting for charger' : 'Queued',
       TranscriptionStatus.running =>
         stage == 'speakers'
             ? 'Detecting speakers…'

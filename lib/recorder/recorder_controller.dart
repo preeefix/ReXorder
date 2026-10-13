@@ -158,6 +158,19 @@ class RecorderController extends Notifier<RecorderState> {
     state = state.copyWith(phase: RecorderPhase.recording);
   }
 
+  Future<int?> addBookmark() async {
+    final recordingId = _recordingId;
+    if (recordingId == null ||
+        (state.phase != RecorderPhase.recording &&
+            state.phase != RecorderPhase.paused)) {
+      return null;
+    }
+    await _writeTail;
+    final positionMs = durationFromPcmBytes(_bytesWritten).inMilliseconds;
+    await _repository.addBookmark(recordingId, positionMs);
+    return positionMs;
+  }
+
   Future<String?> stop() async {
     if (_recordingId == null || _recorder == null) return null;
     state = state.copyWith(phase: RecorderPhase.saving);
