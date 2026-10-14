@@ -362,6 +362,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                             initialValue: selected.id,
                                             decoration: const InputDecoration(
                                               labelText: 'Transcription run',
+                                              border: InputBorder.none,
                                             ),
                                             items: [
                                               for (final run in runs)
