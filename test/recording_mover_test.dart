@@ -23,6 +23,46 @@ void main() {
     expect(await fixture.internalFile(recording).exists(), isFalse);
   });
 
+  test('replaces a stale destination and completes the move', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.createRecording('stale-destination');
+    final destination = File(
+      '${fixture.sdRecordings.path}/${recording.fileName}',
+    );
+    await destination.parent.create(recursive: true);
+    await destination.writeAsBytes([9, 9]);
+
+    final result = await fixture.mover.moveAll(StorageLocation.sd);
+
+    final moved = (await fixture.repository.getRecording(recording.id))!;
+    expect(result.movedCount, 1);
+    expect(moved.storage, StorageLocation.sd);
+    expect(await destination.readAsBytes(), [1, 2, 3]);
+    expect(await fixture.internalFile(recording).exists(), isFalse);
+  });
+
+  test('replaces a stale partial and completes the move', () async {
+    final fixture = await _Fixture.create();
+    addTearDown(fixture.dispose);
+    final recording = await fixture.createRecording('stale-partial');
+    final partial = File(
+      '${fixture.sdRecordings.path}/${recording.fileName}.partial',
+    );
+    await partial.parent.create(recursive: true);
+    await partial.writeAsBytes([9, 9]);
+
+    final result = await fixture.mover.moveAll(StorageLocation.sd);
+
+    final moved = (await fixture.repository.getRecording(recording.id))!;
+    final destination = fixture.storage.fileFor(moved);
+    expect(result.movedCount, 1);
+    expect(moved.storage, StorageLocation.sd);
+    expect(await destination.readAsBytes(), [1, 2, 3]);
+    expect(await partial.exists(), isFalse);
+    expect(await fixture.internalFile(recording).exists(), isFalse);
+  });
+
   test('copy failure preserves the source and database location', () async {
     final fixture = await _Fixture.create(
       copyFile: (source, partial) async {

@@ -93,7 +93,10 @@ class RecordingMover {
     );
     final partial = File('${destinationFile.path}.partial');
     if (await destinationFile.exists()) {
-      throw StateError('Destination already exists for ${recording.title}.');
+      if (!await source.exists()) {
+        throw StateError('Destination already exists for ${recording.title}.');
+      }
+      await destinationFile.delete();
     }
 
     var destinationCreated = false;
