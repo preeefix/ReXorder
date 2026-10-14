@@ -60,6 +60,16 @@ class $RecordingsTable extends Recordings
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  @override
+  late final GeneratedColumnWithTypeConverter<StorageLocation, String> storage =
+      GeneratedColumn<String>(
+        'storage',
+        aliasedName,
+        false,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+        defaultValue: const Constant('internal'),
+      ).withConverter<StorageLocation>($RecordingsTable.$converterstorage);
   static const VerificationMeta _sampleRateMeta = const VerificationMeta(
     'sampleRate',
   );
@@ -154,6 +164,7 @@ class $RecordingsTable extends Recordings
     createdAt,
     durationMs,
     fileName,
+    storage,
     sampleRate,
     status,
     transcriptionStatus,
@@ -285,6 +296,12 @@ class $RecordingsTable extends Recordings
         DriftSqlType.string,
         data['${effectivePrefix}file_name'],
       )!,
+      storage: $RecordingsTable.$converterstorage.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.string,
+          data['${effectivePrefix}storage'],
+        )!,
+      ),
       sampleRate: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}sample_rate'],
@@ -332,6 +349,8 @@ class $RecordingsTable extends Recordings
     return $RecordingsTable(attachedDatabase, alias);
   }
 
+  static JsonTypeConverter2<StorageLocation, String, String> $converterstorage =
+      const EnumNameConverter<StorageLocation>(StorageLocation.values);
   static JsonTypeConverter2<RecordingStatus, String, String> $converterstatus =
       const EnumNameConverter<RecordingStatus>(RecordingStatus.values);
   static JsonTypeConverter2<TranscriptionStatus, String, String>
@@ -350,6 +369,7 @@ class Recording extends DataClass implements Insertable<Recording> {
   final DateTime createdAt;
   final int durationMs;
   final String fileName;
+  final StorageLocation storage;
   final int sampleRate;
   final RecordingStatus status;
   final TranscriptionStatus transcriptionStatus;
@@ -364,6 +384,7 @@ class Recording extends DataClass implements Insertable<Recording> {
     required this.createdAt,
     required this.durationMs,
     required this.fileName,
+    required this.storage,
     required this.sampleRate,
     required this.status,
     required this.transcriptionStatus,
@@ -381,6 +402,11 @@ class Recording extends DataClass implements Insertable<Recording> {
     map['created_at'] = Variable<DateTime>(createdAt);
     map['duration_ms'] = Variable<int>(durationMs);
     map['file_name'] = Variable<String>(fileName);
+    {
+      map['storage'] = Variable<String>(
+        $RecordingsTable.$converterstorage.toSql(storage),
+      );
+    }
     map['sample_rate'] = Variable<int>(sampleRate);
     {
       map['status'] = Variable<String>(
@@ -421,6 +447,7 @@ class Recording extends DataClass implements Insertable<Recording> {
       createdAt: Value(createdAt),
       durationMs: Value(durationMs),
       fileName: Value(fileName),
+      storage: Value(storage),
       sampleRate: Value(sampleRate),
       status: Value(status),
       transcriptionStatus: Value(transcriptionStatus),
@@ -451,6 +478,9 @@ class Recording extends DataClass implements Insertable<Recording> {
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       durationMs: serializer.fromJson<int>(json['durationMs']),
       fileName: serializer.fromJson<String>(json['fileName']),
+      storage: $RecordingsTable.$converterstorage.fromJson(
+        serializer.fromJson<String>(json['storage']),
+      ),
       sampleRate: serializer.fromJson<int>(json['sampleRate']),
       status: $RecordingsTable.$converterstatus.fromJson(
         serializer.fromJson<String>(json['status']),
@@ -477,6 +507,9 @@ class Recording extends DataClass implements Insertable<Recording> {
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'durationMs': serializer.toJson<int>(durationMs),
       'fileName': serializer.toJson<String>(fileName),
+      'storage': serializer.toJson<String>(
+        $RecordingsTable.$converterstorage.toJson(storage),
+      ),
       'sampleRate': serializer.toJson<int>(sampleRate),
       'status': serializer.toJson<String>(
         $RecordingsTable.$converterstatus.toJson(status),
@@ -502,6 +535,7 @@ class Recording extends DataClass implements Insertable<Recording> {
     DateTime? createdAt,
     int? durationMs,
     String? fileName,
+    StorageLocation? storage,
     int? sampleRate,
     RecordingStatus? status,
     TranscriptionStatus? transcriptionStatus,
@@ -516,6 +550,7 @@ class Recording extends DataClass implements Insertable<Recording> {
     createdAt: createdAt ?? this.createdAt,
     durationMs: durationMs ?? this.durationMs,
     fileName: fileName ?? this.fileName,
+    storage: storage ?? this.storage,
     sampleRate: sampleRate ?? this.sampleRate,
     status: status ?? this.status,
     transcriptionStatus: transcriptionStatus ?? this.transcriptionStatus,
@@ -538,6 +573,7 @@ class Recording extends DataClass implements Insertable<Recording> {
           ? data.durationMs.value
           : this.durationMs,
       fileName: data.fileName.present ? data.fileName.value : this.fileName,
+      storage: data.storage.present ? data.storage.value : this.storage,
       sampleRate: data.sampleRate.present
           ? data.sampleRate.value
           : this.sampleRate,
@@ -571,6 +607,7 @@ class Recording extends DataClass implements Insertable<Recording> {
           ..write('createdAt: $createdAt, ')
           ..write('durationMs: $durationMs, ')
           ..write('fileName: $fileName, ')
+          ..write('storage: $storage, ')
           ..write('sampleRate: $sampleRate, ')
           ..write('status: $status, ')
           ..write('transcriptionStatus: $transcriptionStatus, ')
@@ -590,6 +627,7 @@ class Recording extends DataClass implements Insertable<Recording> {
     createdAt,
     durationMs,
     fileName,
+    storage,
     sampleRate,
     status,
     transcriptionStatus,
@@ -608,6 +646,7 @@ class Recording extends DataClass implements Insertable<Recording> {
           other.createdAt == this.createdAt &&
           other.durationMs == this.durationMs &&
           other.fileName == this.fileName &&
+          other.storage == this.storage &&
           other.sampleRate == this.sampleRate &&
           other.status == this.status &&
           other.transcriptionStatus == this.transcriptionStatus &&
@@ -624,6 +663,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
   final Value<DateTime> createdAt;
   final Value<int> durationMs;
   final Value<String> fileName;
+  final Value<StorageLocation> storage;
   final Value<int> sampleRate;
   final Value<RecordingStatus> status;
   final Value<TranscriptionStatus> transcriptionStatus;
@@ -639,6 +679,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     this.createdAt = const Value.absent(),
     this.durationMs = const Value.absent(),
     this.fileName = const Value.absent(),
+    this.storage = const Value.absent(),
     this.sampleRate = const Value.absent(),
     this.status = const Value.absent(),
     this.transcriptionStatus = const Value.absent(),
@@ -655,6 +696,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     required DateTime createdAt,
     required int durationMs,
     required String fileName,
+    this.storage = const Value.absent(),
     required int sampleRate,
     required RecordingStatus status,
     this.transcriptionStatus = const Value.absent(),
@@ -677,6 +719,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     Expression<DateTime>? createdAt,
     Expression<int>? durationMs,
     Expression<String>? fileName,
+    Expression<String>? storage,
     Expression<int>? sampleRate,
     Expression<String>? status,
     Expression<String>? transcriptionStatus,
@@ -693,6 +736,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
       if (createdAt != null) 'created_at': createdAt,
       if (durationMs != null) 'duration_ms': durationMs,
       if (fileName != null) 'file_name': fileName,
+      if (storage != null) 'storage': storage,
       if (sampleRate != null) 'sample_rate': sampleRate,
       if (status != null) 'status': status,
       if (transcriptionStatus != null)
@@ -712,6 +756,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     Value<DateTime>? createdAt,
     Value<int>? durationMs,
     Value<String>? fileName,
+    Value<StorageLocation>? storage,
     Value<int>? sampleRate,
     Value<RecordingStatus>? status,
     Value<TranscriptionStatus>? transcriptionStatus,
@@ -728,6 +773,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
       createdAt: createdAt ?? this.createdAt,
       durationMs: durationMs ?? this.durationMs,
       fileName: fileName ?? this.fileName,
+      storage: storage ?? this.storage,
       sampleRate: sampleRate ?? this.sampleRate,
       status: status ?? this.status,
       transcriptionStatus: transcriptionStatus ?? this.transcriptionStatus,
@@ -757,6 +803,11 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
     }
     if (fileName.present) {
       map['file_name'] = Variable<String>(fileName.value);
+    }
+    if (storage.present) {
+      map['storage'] = Variable<String>(
+        $RecordingsTable.$converterstorage.toSql(storage.value),
+      );
     }
     if (sampleRate.present) {
       map['sample_rate'] = Variable<int>(sampleRate.value);
@@ -804,6 +855,7 @@ class RecordingsCompanion extends UpdateCompanion<Recording> {
           ..write('createdAt: $createdAt, ')
           ..write('durationMs: $durationMs, ')
           ..write('fileName: $fileName, ')
+          ..write('storage: $storage, ')
           ..write('sampleRate: $sampleRate, ')
           ..write('status: $status, ')
           ..write('transcriptionStatus: $transcriptionStatus, ')
@@ -3987,6 +4039,7 @@ typedef $$RecordingsTableCreateCompanionBuilder =
       required DateTime createdAt,
       required int durationMs,
       required String fileName,
+      Value<StorageLocation> storage,
       required int sampleRate,
       required RecordingStatus status,
       Value<TranscriptionStatus> transcriptionStatus,
@@ -4004,6 +4057,7 @@ typedef $$RecordingsTableUpdateCompanionBuilder =
       Value<DateTime> createdAt,
       Value<int> durationMs,
       Value<String> fileName,
+      Value<StorageLocation> storage,
       Value<int> sampleRate,
       Value<RecordingStatus> status,
       Value<TranscriptionStatus> transcriptionStatus,
@@ -4047,6 +4101,12 @@ class $$RecordingsTableFilterComposer
   ColumnFilters<String> get fileName => $composableBuilder(
     column: $table.fileName,
     builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<StorageLocation, StorageLocation, String>
+  get storage => $composableBuilder(
+    column: $table.storage,
+    builder: (column) => ColumnWithTypeConverterFilters(column),
   );
 
   ColumnFilters<int> get sampleRate => $composableBuilder(
@@ -4131,6 +4191,11 @@ class $$RecordingsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get storage => $composableBuilder(
+    column: $table.storage,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get sampleRate => $composableBuilder(
     column: $table.sampleRate,
     builder: (column) => ColumnOrderings(column),
@@ -4197,6 +4262,9 @@ class $$RecordingsTableAnnotationComposer
 
   GeneratedColumn<String> get fileName =>
       $composableBuilder(column: $table.fileName, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<StorageLocation, String> get storage =>
+      $composableBuilder(column: $table.storage, builder: (column) => column);
 
   GeneratedColumn<int> get sampleRate => $composableBuilder(
     column: $table.sampleRate,
@@ -4275,6 +4343,7 @@ class $$RecordingsTableTableManager
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> durationMs = const Value.absent(),
                 Value<String> fileName = const Value.absent(),
+                Value<StorageLocation> storage = const Value.absent(),
                 Value<int> sampleRate = const Value.absent(),
                 Value<RecordingStatus> status = const Value.absent(),
                 Value<TranscriptionStatus> transcriptionStatus =
@@ -4291,6 +4360,7 @@ class $$RecordingsTableTableManager
                 createdAt: createdAt,
                 durationMs: durationMs,
                 fileName: fileName,
+                storage: storage,
                 sampleRate: sampleRate,
                 status: status,
                 transcriptionStatus: transcriptionStatus,
@@ -4308,6 +4378,7 @@ class $$RecordingsTableTableManager
                 required DateTime createdAt,
                 required int durationMs,
                 required String fileName,
+                Value<StorageLocation> storage = const Value.absent(),
                 required int sampleRate,
                 required RecordingStatus status,
                 Value<TranscriptionStatus> transcriptionStatus =
@@ -4324,6 +4395,7 @@ class $$RecordingsTableTableManager
                 createdAt: createdAt,
                 durationMs: durationMs,
                 fileName: fileName,
+                storage: storage,
                 sampleRate: sampleRate,
                 status: status,
                 transcriptionStatus: transcriptionStatus,

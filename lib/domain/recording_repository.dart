@@ -3,10 +3,10 @@ import 'dart:typed_data';
 
 import 'package:drift/drift.dart' as drift;
 import 'package:intl/intl.dart';
-import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import '../data/database.dart' as db;
+import '../data/recording_storage.dart';
 import 'bookmark.dart';
 import 'recording.dart';
 import 'search_hit.dart';
@@ -20,13 +20,21 @@ class RecordingRepository {
   RecordingRepository(
     this._database,
     this.recordingsDirectory, {
+    RecordingStorage? recordingStorage,
     Uuid? uuid,
     DateTime Function()? now,
-  }) : _uuid = uuid ?? const Uuid(),
+  }) : recordingStorage =
+           recordingStorage ??
+           RecordingStorage(
+             internalDirectory: recordingsDirectory,
+             volumeLoader: () async => const [],
+           ),
+       _uuid = uuid ?? const Uuid(),
        _now = now ?? DateTime.now;
 
   final db.AppDatabase _database;
   final Directory recordingsDirectory;
+  final RecordingStorage recordingStorage;
   final Uuid _uuid;
   final DateTime Function() _now;
 
@@ -118,7 +126,11 @@ class RecordingRepository {
         .toList();
   }
 
-  Future<Recording> createRecording({String? id, String? title}) async {
+  Future<Recording> createRecording({
+    String? id,
+    String? title,
+    StorageLocation storage = StorageLocation.internal,
+  }) async {
     final createdAt = _now();
     final recordingId = id ?? _uuid.v4();
     final row = db.RecordingsCompanion.insert(
@@ -127,6 +139,7 @@ class RecordingRepository {
       createdAt: createdAt,
       durationMs: 0,
       fileName: '$recordingId.wav',
+      storage: drift.Value(storage),
       sampleRate: 16000,
       status: RecordingStatus.recording,
     );
@@ -138,6 +151,7 @@ class RecordingRepository {
     required String id,
     required int durationMs,
     required DateTime createdAt,
+    StorageLocation storage = StorageLocation.internal,
   }) async {
     final existing = await getRecording(id);
     if (existing == null) {
@@ -152,6 +166,7 @@ class RecordingRepository {
               createdAt: createdAt,
               durationMs: durationMs,
               fileName: '$id.wav',
+              storage: drift.Value(storage),
               sampleRate: 16000,
               status: RecordingStatus.ready,
             ),
@@ -162,6 +177,7 @@ class RecordingRepository {
       )..where((row) => row.id.equals(id))).write(
         db.RecordingsCompanion(
           durationMs: drift.Value(durationMs),
+          storage: drift.Value(storage),
           status: const drift.Value(RecordingStatus.ready),
         ),
       );
@@ -186,11 +202,19 @@ class RecordingRepository {
         .write(db.RecordingsCompanion(title: drift.Value(title)));
   }
 
+  Future<void> setStorageLocation(String id, StorageLocation storage) async {
+    await (_database.update(_database.recordings)
+          ..where((row) => row.id.equals(id)))
+        .write(db.RecordingsCompanion(storage: drift.Value(storage)));
+  }
+
   Future<void> delete(String id) async {
     final recording = await getRecording(id);
     if (recording == null) return;
-    final file = File(p.join(recordingsDirectory.path, recording.fileName));
-    if (await file.exists()) await file.delete();
+    if (recordingStorage.isAvailable(recording)) {
+      final file = recordingStorage.fileFor(recording);
+      if (await file.exists()) await file.delete();
+    }
     await (_database.delete(
       _database.recordings,
     )..where((row) => row.id.equals(id))).go();
@@ -204,6 +228,7 @@ class RecordingRepository {
     fileName: row.fileName,
     sampleRate: row.sampleRate,
     status: row.status,
+    storage: row.storage,
     transcriptionStatus: row.transcriptionStatus,
     languageHint: row.languageHint,
     asrModelId: row.asrModelId,

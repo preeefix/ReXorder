@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
 import 'package:rexorder/data/database.dart';
 import 'package:rexorder/data/recovery.dart';
+import 'package:rexorder/data/recording_storage.dart';
 import 'package:rexorder/domain/recording.dart';
 import 'package:rexorder/domain/recording_repository.dart';
 
@@ -156,5 +157,89 @@ void main() {
       await File('${recordingsDirectory.path}/empty.wav').exists(),
       isFalse,
     );
+  });
+
+  test(
+    'preserves SD rows while unmounted and cleans them when mounted',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'rexorder-recovery-sd-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final database = AppDatabase.memory();
+      addTearDown(database.close);
+      final internal = Directory('${directory.path}/internal/recordings')
+        ..createSync(recursive: true);
+      var mounted = false;
+      final storage = RecordingStorage(
+        internalDirectory: internal,
+        volumeLoader: () async => [
+          StorageVolume(
+            path: '${directory.path}/primary/files',
+            removable: false,
+            mounted: true,
+            description: 'Internal',
+            freeBytes: 1000,
+            totalBytes: 2000,
+          ),
+          StorageVolume(
+            path: '${directory.path}/sd/files',
+            removable: true,
+            mounted: mounted,
+            description: 'SD',
+            freeBytes: 1000,
+            totalBytes: 2000,
+          ),
+        ],
+      );
+      addTearDown(storage.dispose);
+      await storage.refresh();
+      final repository = RecordingRepository(
+        database,
+        internal,
+        recordingStorage: storage,
+      );
+      final recording = await repository.createRecording(
+        id: 'sd-missing',
+        storage: StorageLocation.sd,
+      );
+
+      await recoverOrphanedRecordings(
+        recordingStorage: storage,
+        repository: repository,
+      );
+
+      expect(await repository.getRecording(recording.id), isNotNull);
+
+      mounted = true;
+      await storage.refresh();
+      await recoverOrphanedRecordings(
+        recordingStorage: storage,
+        repository: repository,
+      );
+
+      expect(await repository.getRecording(recording.id), isNull);
+    },
+  );
+
+  test('removes stray partial files from mounted storage', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'rexorder-recovery-partial-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final database = AppDatabase.memory();
+    addTearDown(database.close);
+    final recordingsDirectory = Directory('${directory.path}/recordings')
+      ..createSync();
+    final repository = RecordingRepository(database, recordingsDirectory);
+    final partial = File('${recordingsDirectory.path}/clip.wav.partial')
+      ..writeAsBytesSync([1, 2, 3]);
+
+    await recoverOrphanedRecordings(
+      recordingsDirectory: recordingsDirectory,
+      repository: repository,
+    );
+
+    expect(await partial.exists(), isFalse);
   });
 }

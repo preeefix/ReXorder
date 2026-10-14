@@ -8,6 +8,7 @@ import 'package:rexorder/asr/asr_engine.dart';
 import 'package:rexorder/asr/diarizer.dart';
 import 'package:rexorder/asr/vad_segmenter.dart';
 import 'package:rexorder/data/database.dart' hide Recording;
+import 'package:rexorder/data/recording_storage.dart';
 import 'package:rexorder/domain/recording.dart';
 import 'package:rexorder/domain/recording_repository.dart';
 import 'package:rexorder/domain/transcript_segment.dart';
@@ -209,6 +210,46 @@ void main() {
       TranscriptionStatus.done,
     );
   });
+
+  test(
+    'unavailable SD recordings stay queued and resume when mounted',
+    () async {
+      var sdMounted = false;
+      final fixture = await _Fixture.create(
+        includeSd: true,
+        isSdMounted: () => sdMounted,
+      );
+      addTearDown(fixture.dispose);
+      final recording = await fixture.recording(
+        'sd-queued',
+        storage: StorageLocation.sd,
+      );
+      final processor = _FakeProcessor();
+      final queue = fixture.queue(processor);
+      final run = await fixture.repository.createTranscriptionRun(
+        recordingId: recording.id,
+        modelId: 'whisper-small',
+      );
+
+      await queue.processQueue();
+
+      expect(
+        (await fixture.repository.getRun(run.id))!.status,
+        TranscriptionStatus.queued,
+      );
+      expect(processor.segmentCalls, 0);
+
+      sdMounted = true;
+      await fixture.recordingStorage.refresh();
+      await queue.processQueue();
+
+      expect(
+        (await fixture.repository.getRun(run.id))!.status,
+        TranscriptionStatus.done,
+      );
+      expect(processor.segmentCalls, 1);
+    },
+  );
 
   test('re-transcribe preserves prior runs and switches on success', () async {
     final fixture = await _Fixture.create();
@@ -719,16 +760,21 @@ class _Fixture {
     this.directory,
     this.database,
     this.repository,
+    this.recordingStorage,
     this.modelsDirectory,
   );
 
   final Directory directory;
   final AppDatabase database;
   final RecordingRepository repository;
+  final RecordingStorage recordingStorage;
   final Directory modelsDirectory;
   final _queues = <TranscriptionQueue>[];
 
-  static Future<_Fixture> create() async {
+  static Future<_Fixture> create({
+    bool includeSd = false,
+    bool Function()? isSdMounted,
+  }) async {
     final directory = await Directory.systemTemp.createTemp('rexorder-queue-');
     final recordings = Directory('${directory.path}/recordings')
       ..createSync(recursive: true);
@@ -742,6 +788,29 @@ class _Fixture {
         ..writeAsBytesSync([1]);
     }
     final database = AppDatabase.memory();
+    final recordingStorage = RecordingStorage(
+      internalDirectory: recordings,
+      volumeLoader: () async => [
+        StorageVolume(
+          path: '${directory.path}/primary/files',
+          removable: false,
+          mounted: true,
+          description: 'Internal',
+          freeBytes: 1024 * 1024,
+          totalBytes: 2 * 1024 * 1024,
+        ),
+        if (includeSd)
+          StorageVolume(
+            path: '${directory.path}/sd/files',
+            removable: true,
+            mounted: isSdMounted?.call() ?? false,
+            description: 'SD card',
+            freeBytes: 1024 * 1024,
+            totalBytes: 2 * 1024 * 1024,
+          ),
+      ],
+    );
+    await recordingStorage.refresh();
     var now = DateTime(2026, 1, 1);
     final fixture = _Fixture(
       directory,
@@ -749,21 +818,31 @@ class _Fixture {
       RecordingRepository(
         database,
         recordings,
+        recordingStorage: recordingStorage,
         now: () {
           final value = now;
           now = value.add(const Duration(seconds: 1));
           return value;
         },
       ),
+      recordingStorage,
       models,
     );
     return fixture;
   }
 
-  Future<Recording> recording(String id) async {
-    final recording = await repository.createRecording(id: id);
+  Future<Recording> recording(
+    String id, {
+    StorageLocation storage = StorageLocation.internal,
+  }) async {
+    final recording = await repository.createRecording(
+      id: id,
+      storage: storage,
+    );
     await repository.markReady(id, 1000);
-    await File('${directory.path}/recordings/$id.wav').writeAsBytes([1]);
+    final file = recordingStorage.fileFor(recording);
+    await file.parent.create(recursive: true);
+    await file.writeAsBytes([1]);
     return recording;
   }
 
@@ -779,7 +858,6 @@ class _Fixture {
   }) {
     final queue = TranscriptionQueue(
       repository: repository,
-      recordingsDirectory: Directory('${directory.path}/recordings'),
       modelsDirectory: modelsDirectory,
       modelClient: _FakeModelClient(
         installed:
@@ -805,6 +883,7 @@ class _Fixture {
     for (final queue in _queues) {
       await queue.dispose();
     }
+    recordingStorage.dispose();
     await database.close();
     await directory.delete(recursive: true);
   }

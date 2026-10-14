@@ -11,6 +11,7 @@ import 'package:uuid/uuid.dart';
 import '../audio/audio_math.dart';
 import '../audio/wav_writer.dart';
 import '../data/providers.dart';
+import '../data/recording_storage.dart';
 import '../domain/recording_repository.dart';
 import '../domain/recording.dart';
 import '../processing/transcription_queue.dart';
@@ -25,6 +26,7 @@ class RecorderState {
     this.level = 0,
     this.savedRecordingId,
     this.error,
+    this.storageFallback = false,
   });
 
   final RecorderPhase phase;
@@ -32,6 +34,7 @@ class RecorderState {
   final double level;
   final String? savedRecordingId;
   final String? error;
+  final bool storageFallback;
 
   RecorderState copyWith({
     RecorderPhase? phase,
@@ -39,6 +42,7 @@ class RecorderState {
     double? level,
     String? savedRecordingId,
     String? error,
+    bool? storageFallback,
     bool clearError = false,
   }) => RecorderState(
     phase: phase ?? this.phase,
@@ -46,6 +50,7 @@ class RecorderState {
     level: level ?? this.level,
     savedRecordingId: savedRecordingId ?? this.savedRecordingId,
     error: clearError ? null : error ?? this.error,
+    storageFallback: storageFallback ?? this.storageFallback,
   );
 }
 
@@ -62,6 +67,7 @@ class RecorderController extends Notifier<RecorderState> {
   IOSink? _sink;
   File? _pcmFile;
   String? _recordingId;
+  StorageLocation? _storageLocation;
   int _bytesWritten = 0;
   DateTime? _lastMeterUpdate;
   Future<void> _writeTail = Future<void>.value();
@@ -69,7 +75,11 @@ class RecorderController extends Notifier<RecorderState> {
 
   RecordingRepository get _repository {
     final db = ref.read(appDatabaseProvider);
-    return RecordingRepository(db, ref.read(recordingsDirectoryProvider));
+    return RecordingRepository(
+      db,
+      ref.read(recordingsDirectoryProvider),
+      recordingStorage: ref.read(recordingStorageProvider),
+    );
   }
 
   @override
@@ -95,10 +105,17 @@ class RecorderController extends Notifier<RecorderState> {
       await RecordingServiceChannel.start();
 
       final id = const Uuid().v4();
-      final directory = ref.read(recordingsDirectoryProvider);
+      final storage = ref.read(recordingStorageProvider);
+      await storage.refresh();
+      final requestedLocation = await RecordingStoragePreferences.getLocation();
+      final location = storage.resolveNewRecordingLocation(requestedLocation);
+      final fallback = location != requestedLocation;
+      await storage.createDirectory(location);
+      final directory = storage.dirFor(location);
       _recordingId = id;
+      _storageLocation = location;
       _pcmFile = File(p.join(directory.path, '$id.pcm'));
-      await _repository.createRecording(id: id);
+      await _repository.createRecording(id: id, storage: location);
       _sink = _pcmFile!.openWrite(mode: FileMode.writeOnlyAppend);
       _bytesWritten = 0;
       _recorder = AudioRecorder();
@@ -120,7 +137,10 @@ class RecorderController extends Notifier<RecorderState> {
           state = state.copyWith(elapsed: durationFromPcmBytes(_bytesWritten));
         }
       });
-      state = const RecorderState(phase: RecorderPhase.recording);
+      state = RecorderState(
+        phase: RecorderPhase.recording,
+        storageFallback: fallback,
+      );
     } catch (error) {
       await _cleanupFailedStart();
       state = state.copyWith(error: error.toString());
@@ -184,7 +204,13 @@ class RecorderController extends Notifier<RecorderState> {
       await _sink?.close();
       final pcmFile = _pcmFile!;
       final wavFile = File(
-        p.join(ref.read(recordingsDirectoryProvider).path, '$id.wav'),
+        p.join(
+          ref
+              .read(recordingStorageProvider)
+              .dirFor(_storageLocation ?? StorageLocation.internal)
+              .path,
+          '$id.wav',
+        ),
       );
       await wrapPcmToWav(pcmFile, wavFile);
       await pcmFile.delete();
@@ -233,6 +259,7 @@ class RecorderController extends Notifier<RecorderState> {
 
   void _reset() {
     _recordingId = null;
+    _storageLocation = null;
     _pcmFile = null;
     _sink = null;
     _subscription = null;

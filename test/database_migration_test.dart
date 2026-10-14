@@ -418,4 +418,45 @@ void main() {
     expect(await database.select(database.people).get(), isEmpty);
     expect(await database.select(database.personVoiceprints).get(), isEmpty);
   });
+
+  test('migrates v6 recordings to internal storage by default', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'rexorder-migration-v6-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final file = File('${directory.path}/v6.sqlite');
+    final connection = sqlite.sqlite3.open(file.path);
+    connection.execute('''
+      CREATE TABLE recordings (
+        id TEXT NOT NULL PRIMARY KEY,
+        title TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        file_name TEXT NOT NULL,
+        sample_rate INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        transcription_status TEXT NOT NULL DEFAULT 'none',
+        language_hint TEXT NOT NULL DEFAULT 'auto',
+        asr_model_id TEXT,
+        transcription_error TEXT,
+        speaker_count_hint INTEGER,
+        active_run_id TEXT
+      )
+    ''');
+    connection.execute('''
+      INSERT INTO recordings
+        (id, title, created_at, duration_ms, file_name, sample_rate, status)
+      VALUES ('legacy-v6', 'Legacy v6', 1767261600000, 1500, 'legacy.wav',
+              16000, 'ready')
+    ''');
+    connection.execute('PRAGMA user_version = 6');
+    connection.close();
+
+    final database = AppDatabase.open(file);
+    addTearDown(database.close);
+    final recording = await database.select(database.recordings).getSingle();
+
+    expect(recording.id, 'legacy-v6');
+    expect(recording.storage, StorageLocation.internal);
+  });
 }

@@ -21,7 +21,6 @@ import 'transcription_worker.dart';
 class TranscriptionQueue {
   TranscriptionQueue({
     required this.repository,
-    required this.recordingsDirectory,
     required this.modelsDirectory,
     ModelImportClient? modelClient,
     this._processor,
@@ -46,7 +45,6 @@ class TranscriptionQueue {
   }
 
   final RecordingRepository repository;
-  final Directory recordingsDirectory;
   final Directory modelsDirectory;
   final ModelImportClient _modelClient;
   TranscriptionProcessor? _processor;
@@ -93,9 +91,21 @@ class TranscriptionQueue {
   }
 
   Future<void> _runQueue() async {
+    await repository.recordingStorage.refresh();
     while (true) {
       final queued = await repository.listQueuedTranscriptions();
       if (queued.isEmpty) {
+        waitingForCharger.value = false;
+        return;
+      }
+      TranscriptionJob? availableJob;
+      for (final queuedJob in queued) {
+        if (repository.recordingStorage.isAvailable(queuedJob.recording)) {
+          availableJob = queuedJob;
+          break;
+        }
+      }
+      if (availableJob == null) {
         waitingForCharger.value = false;
         return;
       }
@@ -128,7 +138,7 @@ class TranscriptionQueue {
               (file) => installed[model.id]?.contains(file) ?? false,
             ),
           );
-      final job = queued.first;
+      final job = availableJob;
       final recording = job.recording;
       final run = job.run;
       final requestedModel = modelById(run.asrModelId ?? '');
@@ -157,7 +167,8 @@ class TranscriptionQueue {
       await _stopServiceBestEffort();
       return;
     }
-    final wavFile = File(p.join(recordingsDirectory.path, recording.fileName));
+    if (!repository.recordingStorage.isAvailable(recording)) return;
+    final wavFile = repository.recordingStorage.fileFor(recording);
     final vadFile = File(
       p.join(modelsDirectory.path, 'silero-vad', 'silero_vad.onnx'),
     );
@@ -316,6 +327,20 @@ class TranscriptionQueue {
       } catch (_) {
         // Preserve the transcription error while releasing the recognizer.
       }
+      await repository.recordingStorage.refresh();
+      if (!repository.recordingStorage.isAvailable(recording)) {
+        await repository.updateTranscription(
+          id: recording.id,
+          status: TranscriptionStatus.queued,
+          runId: run.id,
+          modelId: model.id,
+          languageHint: run.languageHint,
+          speakerCountHint: run.speakerCountHint,
+          processingMsDelta: stopwatch.elapsedMilliseconds,
+          diarized: run.diarized,
+        );
+        return;
+      }
       await repository.updateTranscription(
         id: recording.id,
         status: TranscriptionStatus.failed,
@@ -351,7 +376,8 @@ class TranscriptionQueue {
     final processor = _processor ??= await TranscriptionWorker.spawn(
       modelsDirectory: modelsDirectory,
     );
-    final wavFile = File(p.join(recordingsDirectory.path, recording.fileName));
+    if (!repository.recordingStorage.isAvailable(recording)) return;
+    final wavFile = repository.recordingStorage.fileFor(recording);
     final embeddings = await processor.embedSpeakers(
       wavFile,
       grouped,

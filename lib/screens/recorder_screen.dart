@@ -10,6 +10,14 @@ class RecorderScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.listen(recorderControllerProvider, (previous, next) {
+      if (!next.storageFallback || previous?.storageFallback == true) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('SD card unavailable — saving to internal storage'),
+        ),
+      );
+    });
     final l10n = AppLocalizations.of(context)!;
     final state = ref.watch(recorderControllerProvider);
     final controller = ref.read(recorderControllerProvider.notifier);

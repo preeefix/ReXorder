@@ -4,6 +4,8 @@ part 'recording.freezed.dart';
 
 enum RecordingStatus { recording, ready }
 
+enum StorageLocation { internal, sd }
+
 enum TranscriptionStatus { none, queued, running, done, failed }
 
 enum LanguageHint { auto, en, ja }
@@ -18,6 +20,7 @@ abstract class Recording with _$Recording {
     required String fileName,
     required int sampleRate,
     required RecordingStatus status,
+    @Default(StorageLocation.internal) StorageLocation storage,
     @Default(TranscriptionStatus.none) TranscriptionStatus transcriptionStatus,
     @Default(LanguageHint.auto) LanguageHint languageHint,
     String? asrModelId,

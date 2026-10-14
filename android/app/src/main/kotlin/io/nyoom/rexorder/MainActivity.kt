@@ -8,8 +8,10 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
+import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.os.storage.StorageManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
@@ -34,6 +36,47 @@ class MainActivity : FlutterActivity() {
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         modelImporter = ModelImporter(contentResolver, cacheDir, filesDir)
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "rexorder/storage",
+        ).setMethodCallHandler { call, result ->
+            when (call.method) {
+                "listVolumes" -> {
+                    try {
+                        val storageManager = getSystemService(
+                            Context.STORAGE_SERVICE,
+                        ) as StorageManager
+                        val volumes = getExternalFilesDirs(null)
+                            .filterNotNull()
+                            .map { file ->
+                                val storageVolume = storageManager.getStorageVolume(file)
+                                mapOf(
+                                    "path" to file.absolutePath,
+                                    "removable" to (storageVolume?.isRemovable ?: false),
+                                    "mounted" to (
+                                        Environment.getExternalStorageState(file) ==
+                                            Environment.MEDIA_MOUNTED
+                                        ),
+                                    "description" to (
+                                        storageVolume?.getDescription(this)
+                                            ?: file.absolutePath
+                                        ),
+                                    "freeBytes" to file.usableSpace,
+                                    "totalBytes" to file.totalSpace,
+                                )
+                            }
+                        result.success(volumes)
+                    } catch (error: Exception) {
+                        result.error(
+                            "storage_discovery_failed",
+                            error.message ?: "Unable to list storage volumes.",
+                            null,
+                        )
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
             "rexorder/recording_service",

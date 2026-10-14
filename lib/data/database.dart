@@ -14,6 +14,8 @@ class Recordings extends Table {
   DateTimeColumn get createdAt => dateTime()();
   IntColumn get durationMs => integer()();
   TextColumn get fileName => text()();
+  TextColumn get storage =>
+      textEnum<StorageLocation>().withDefault(const Constant('internal'))();
   IntColumn get sampleRate => integer()();
   TextColumn get status => textEnum<RecordingStatus>()();
   TextColumn get transcriptionStatus =>
@@ -167,12 +169,15 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.memory() : super(NativeDatabase.memory());
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
     onCreate: (migrator) => migrator.createAll(),
     onUpgrade: (migrator, from, to) async {
+      if (from < 7) {
+        await migrator.addColumn(recordings, recordings.storage);
+      }
       if (from < 2) {
         await migrator.addColumn(recordings, recordings.transcriptionStatus);
         await migrator.addColumn(recordings, recordings.languageHint);

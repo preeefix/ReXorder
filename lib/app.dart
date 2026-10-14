@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,12 +17,14 @@ import 'screens/people_screen.dart';
 import 'screens/recorder_screen.dart';
 import 'screens/search_screen.dart';
 import 'screens/settings_screen.dart';
+import 'processing/transcription_queue.dart';
 import 'theme/theme_mode_provider.dart';
 
 final recordingRepositoryProvider = Provider<RecordingRepository>(
   (ref) => RecordingRepository(
     ref.watch(appDatabaseProvider),
     ref.watch(recordingsDirectoryProvider),
+    recordingStorage: ref.watch(recordingStorageProvider),
   ),
 );
 
@@ -77,11 +81,40 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return router;
 });
 
-class ReXorderApp extends ConsumerWidget {
+class ReXorderApp extends ConsumerStatefulWidget {
   const ReXorderApp({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ReXorderApp> createState() => _ReXorderAppState();
+}
+
+class _ReXorderAppState extends ConsumerState<ReXorderApp>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(_refreshStorageAndQueue());
+  }
+
+  Future<void> _refreshStorageAndQueue() async {
+    await ref.read(recordingStorageProvider).refresh();
+    await ref.read(transcriptionQueueProvider).processQueue();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return MaterialApp.router(
       onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       theme: ThemeData(

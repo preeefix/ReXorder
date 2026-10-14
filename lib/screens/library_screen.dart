@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../app.dart';
+import '../data/providers.dart';
 import '../domain/recording.dart';
 import '../l10n/generated/app_localizations.dart';
 import '../models/transcription_models_banner.dart';
@@ -125,37 +126,71 @@ class _EmptyLibrary extends StatelessWidget {
   );
 }
 
-class _RecordingTile extends StatelessWidget {
+class _RecordingTile extends ConsumerWidget {
   const _RecordingTile({required this.recording});
 
   final Recording recording;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final date = DateFormat('MMM d, yyyy · HH:mm').format(recording.createdAt);
     final elapsed = Duration(milliseconds: recording.durationMs);
-    return Card(
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        leading: CircleAvatar(
-          backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-          child: const Icon(Icons.mic_none),
-        ),
-        title: Text(
-          recording.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-        subtitle: Text('$date  ·  ${_formatDuration(elapsed)}'),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _TranscriptionStatus(recording.transcriptionStatus),
-            const Icon(Icons.chevron_right),
-          ],
-        ),
-        onTap: () => context.push('/recording/${recording.id}'),
-      ),
+    final storage = ref.watch(recordingStorageProvider);
+    return ListenableBuilder(
+      listenable: storage,
+      builder: (context, _) {
+        final unavailable =
+            recording.storage == StorageLocation.sd &&
+            !storage.isAvailable(recording);
+        return Card(
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 8,
+            ),
+            leading: CircleAvatar(
+              backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+              child: const Icon(Icons.mic_none),
+            ),
+            title: Text(
+              recording.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('$date  ·  ${_formatDuration(elapsed)}'),
+                if (unavailable) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    'SD card not available',
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (unavailable)
+                  const Padding(
+                    padding: EdgeInsets.only(right: 8),
+                    child: Tooltip(
+                      message: 'SD card not available',
+                      child: Icon(Icons.sd_card_alert),
+                    ),
+                  ),
+                _TranscriptionStatus(recording.transcriptionStatus),
+                const Icon(Icons.chevron_right),
+              ],
+            ),
+            onTap: () => context.push('/recording/${recording.id}'),
+          ),
+        );
+      },
     );
   }
 }

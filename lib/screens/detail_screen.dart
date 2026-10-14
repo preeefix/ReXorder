@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -46,10 +47,13 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
   Recording? _recording;
   String? _error;
   Stream<Map<int, SpeakerNameDetails>>? _speakerDetailsStream;
+  bool _audioReady = false;
+  String? _loadedFilePath;
 
   @override
   void initState() {
     super.initState();
+    ref.read(recordingStorageProvider).addListener(_onStorageChanged);
     _loadRecording();
   }
 
@@ -61,22 +65,53 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
         setState(() => _error = 'Recording not found.');
         return;
       }
-      final file = File(
-        p.join(ref.read(recordingsDirectoryProvider).path, recording.fileName),
-      );
-      await _player.setFilePath(file.path);
-      final initialPositionMs = widget.initialPositionMs;
-      if (initialPositionMs != null) {
-        await _player.seek(Duration(milliseconds: initialPositionMs));
-      }
       if (mounted) setState(() => _recording = recording);
+      await _loadAudio(recording);
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
     }
   }
 
+  Future<void> _loadAudio(Recording recording) async {
+    final storage = ref.read(recordingStorageProvider);
+    if (!storage.isAvailable(recording)) {
+      if (mounted) setState(() => _audioReady = false);
+      return;
+    }
+    final file = storage.fileFor(recording);
+    if (!await file.exists()) {
+      if (mounted) setState(() => _audioReady = false);
+      return;
+    }
+    if (_loadedFilePath == file.path && _audioReady) return;
+    try {
+      await _player.setFilePath(file.path);
+      final initialPositionMs = widget.initialPositionMs;
+      if (initialPositionMs != null) {
+        await _player.seek(Duration(milliseconds: initialPositionMs));
+      }
+      _loadedFilePath = file.path;
+      if (mounted) setState(() => _audioReady = true);
+    } catch (_) {
+      if (mounted) setState(() => _audioReady = false);
+    }
+  }
+
+  void _onStorageChanged() {
+    final recording = _recording;
+    if (recording == null) return;
+    if (!ref.read(recordingStorageProvider).isAvailable(recording)) {
+      _loadedFilePath = null;
+      unawaited(_player.stop());
+      if (mounted) setState(() => _audioReady = false);
+    } else {
+      unawaited(_loadAudio(recording));
+    }
+  }
+
   @override
   void dispose() {
+    ref.read(recordingStorageProvider).removeListener(_onStorageChanged);
     _player.dispose();
     super.dispose();
   }
@@ -103,6 +138,8 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
       initialData: recording,
       builder: (context, recordingSnapshot) {
         final current = recordingSnapshot.data ?? recording;
+        final storage = ref.read(recordingStorageProvider);
+        final audioAvailable = _audioReady && storage.isAvailable(current);
         return StreamBuilder<List<TranscriptSegment>>(
           stream: repository.watchTranscriptSegments(recording.id),
           initialData: const [],
@@ -150,7 +187,9 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                           ),
                           IconButton(
                             tooltip: l10n.share,
-                            onPressed: () => _share(current),
+                            onPressed: audioAvailable
+                                ? () => _share(current)
+                                : null,
                             icon: const Icon(Icons.share_outlined),
                           ),
                           IconButton(
@@ -170,6 +209,19 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                               style: Theme.of(context).textTheme.headlineSmall,
                             ),
                             const SizedBox(height: 8),
+                            if (!storage.isAvailable(current))
+                              Card(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.errorContainer,
+                                child: const ListTile(
+                                  leading: Icon(Icons.sd_card_alert),
+                                  title: Text('SD card not available'),
+                                  subtitle: Text(
+                                    'Insert and mount the card to play, share, or transcribe this recording. Transcript text and exports remain available.',
+                                  ),
+                                ),
+                              ),
                             Text(
                               DateFormat(
                                 'yyyy-MM-dd HH:mm',
@@ -210,13 +262,14 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                                         maxMilliseconds,
                                                       ),
                                                   max: maxMilliseconds,
-                                                  onChanged: (value) =>
-                                                      _player.seek(
-                                                        Duration(
-                                                          milliseconds: value
-                                                              .round(),
-                                                        ),
-                                                      ),
+                                                  onChanged: audioAvailable
+                                                      ? (value) => _player.seek(
+                                                          Duration(
+                                                            milliseconds: value
+                                                                .round(),
+                                                          ),
+                                                        )
+                                                      : null,
                                                 ),
                                                 Row(
                                                   mainAxisAlignment:
@@ -245,9 +298,11 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                           children: [
                                             IconButton.filled(
                                               iconSize: 36,
-                                              onPressed: () => playing
-                                                  ? _player.pause()
-                                                  : _player.play(),
+                                              onPressed: audioAvailable
+                                                  ? () => playing
+                                                        ? _player.pause()
+                                                        : _player.play()
+                                                  : null,
                                               icon: Icon(
                                                 playing
                                                     ? Icons.pause_rounded
@@ -256,10 +311,14 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                             ),
                                             IconButton(
                                               tooltip: 'Add bookmark',
-                                              onPressed: () => _addBookmark(
-                                                recording.id,
-                                                _player.position.inMilliseconds,
-                                              ),
+                                              onPressed: audioAvailable
+                                                  ? () => _addBookmark(
+                                                      recording.id,
+                                                      _player
+                                                          .position
+                                                          .inMilliseconds,
+                                                    )
+                                                  : null,
                                               icon: const Icon(
                                                 Icons.bookmark_add_outlined,
                                               ),
@@ -288,6 +347,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                           segments: segments,
                                           stage: stage,
                                           waitingForCharger: waitingForCharger,
+                                          audioAvailable: audioAvailable,
                                           onTranscribe: () =>
                                               _transcribe(current),
                                           onRetry: () => _retry(current),
@@ -325,11 +385,14 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                               ? bookmark.label!
                                               : 'Bookmark',
                                         ),
-                                        onTap: () => _player.seek(
-                                          Duration(
-                                            milliseconds: bookmark.positionMs,
-                                          ),
-                                        ),
+                                        onTap: audioAvailable
+                                            ? () => _player.seek(
+                                                Duration(
+                                                  milliseconds:
+                                                      bookmark.positionMs,
+                                                ),
+                                              )
+                                            : null,
                                         onLongPress: () =>
                                             _manageBookmark(bookmark),
                                       ),
@@ -499,8 +562,10 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                                               detailsSnapshot.data ?? const {},
                                           position:
                                               snapshot.data ?? Duration.zero,
-                                          onSeek: (position) =>
-                                              _player.seek(position),
+                                          onSeek: audioAvailable
+                                              ? (position) =>
+                                                    _player.seek(position)
+                                              : (_) {},
                                           onRenameSpeaker: (speaker, name) =>
                                               _manageSpeaker(
                                                 recording.id,
@@ -517,7 +582,9 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
                             SizedBox(
                               width: double.infinity,
                               child: OutlinedButton.icon(
-                                onPressed: () => _share(current),
+                                onPressed: audioAvailable
+                                    ? () => _share(current)
+                                    : null,
                                 icon: const Icon(Icons.ios_share),
                                 label: Text(l10n.shareWav),
                               ),
@@ -537,6 +604,7 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
   }
 
   Future<void> _transcribe(Recording recording) async {
+    if (!ref.read(recordingStorageProvider).isAvailable(recording)) return;
     final installed = await const MethodChannelModelImportClient()
         .listInstalled();
     final models = modelCatalog
@@ -686,14 +754,17 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
         );
   }
 
-  Future<void> _retry(Recording recording) => ref
-      .read(transcriptionQueueProvider)
-      .enqueue(
-        recording.id,
-        modelId: recording.asrModelId,
-        language: recording.languageHint,
-        speakerCount: recording.speakerCountHint,
-      );
+  Future<void> _retry(Recording recording) async {
+    if (!ref.read(recordingStorageProvider).isAvailable(recording)) return;
+    await ref
+        .read(transcriptionQueueProvider)
+        .enqueue(
+          recording.id,
+          modelId: recording.asrModelId,
+          language: recording.languageHint,
+          speakerCount: recording.speakerCountHint,
+        );
+  }
 
   Future<void> _manageSpeaker(
     String recordingId,
@@ -893,9 +964,9 @@ class _DetailScreenState extends ConsumerState<DetailScreen> {
   }
 
   Future<void> _share(Recording recording) async {
-    final file = File(
-      p.join(ref.read(recordingsDirectoryProvider).path, recording.fileName),
-    );
+    final storage = ref.read(recordingStorageProvider);
+    if (!storage.isAvailable(recording)) return;
+    final file = storage.fileFor(recording);
     await SharePlus.instance.share(
       ShareParams(
         files: [XFile(file.path, mimeType: 'audio/wav')],
@@ -1070,6 +1141,7 @@ class _TranscriptionStatusRow extends StatelessWidget {
     required this.segments,
     required this.stage,
     required this.waitingForCharger,
+    required this.audioAvailable,
     required this.onTranscribe,
     required this.onRetry,
   });
@@ -1078,6 +1150,7 @@ class _TranscriptionStatusRow extends StatelessWidget {
   final List<TranscriptSegment> segments;
   final String? stage;
   final bool waitingForCharger;
+  final bool audioAvailable;
   final Future<void> Function() onTranscribe;
   final Future<void> Function() onRetry;
 
@@ -1106,7 +1179,7 @@ class _TranscriptionStatusRow extends StatelessWidget {
             if (status == TranscriptionStatus.none ||
                 status == TranscriptionStatus.done)
               TextButton(
-                onPressed: onTranscribe,
+                onPressed: audioAvailable ? onTranscribe : null,
                 child: Text(
                   status == TranscriptionStatus.done
                       ? 'Re-transcribe'
@@ -1115,7 +1188,7 @@ class _TranscriptionStatusRow extends StatelessWidget {
               ),
             if (status == TranscriptionStatus.failed)
               TextButton.icon(
-                onPressed: onRetry,
+                onPressed: audioAvailable ? onRetry : null,
                 icon: const Icon(Icons.refresh),
                 label: const Text('Retry'),
               ),

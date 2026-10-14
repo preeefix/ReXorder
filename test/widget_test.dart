@@ -7,6 +7,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:rexorder/app.dart' show recordingsProvider;
 import 'package:rexorder/data/database.dart' hide Recording;
+import 'package:rexorder/data/recording_storage.dart';
+import 'package:rexorder/data/providers.dart';
 import 'package:rexorder/domain/recording.dart';
 import 'package:rexorder/domain/recording_repository.dart';
 import 'package:rexorder/l10n/generated/app_localizations.dart';
@@ -21,9 +23,16 @@ void main() {
     final recordings = StreamController<List<Recording>>.broadcast();
     final database = AppDatabase.memory();
     final recordingsDirectory = Directory.systemTemp;
+    final recordingStorage = RecordingStorage(
+      internalDirectory: recordingsDirectory,
+      volumeLoader: () async => const [],
+    );
     final queue = TranscriptionQueue(
-      repository: RecordingRepository(database, recordingsDirectory),
-      recordingsDirectory: recordingsDirectory,
+      repository: RecordingRepository(
+        database,
+        recordingsDirectory,
+        recordingStorage: recordingStorage,
+      ),
       modelsDirectory: Directory.systemTemp,
       isCharging: () async => false,
       chargingChanges: const Stream.empty(),
@@ -31,6 +40,7 @@ void main() {
     );
     addTearDown(() async {
       await queue.dispose();
+      recordingStorage.dispose();
       await database.close();
     });
     await tester.pumpWidget(
@@ -38,6 +48,7 @@ void main() {
         overrides: [
           recordingsProvider.overrideWith((ref) => recordings.stream),
           transcriptionQueueProvider.overrideWithValue(queue),
+          recordingStorageProvider.overrideWithValue(recordingStorage),
           modelManagerProvider.overrideWith(_StaticModelManagerController.new),
         ],
         child: MaterialApp(
